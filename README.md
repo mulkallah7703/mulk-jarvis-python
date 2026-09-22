@@ -2,7 +2,12 @@
 
 Voice assistant for **Mulk Allah Alsadi**. It listens from the moment it starts. Say **mulk** (or **ملك** / **Mulk Allah**) and it answers out loud, then keeps listening for the next question. No button, and no wake word between questions.
 
-Speech-to-text stays on this machine (faster-whisper). Answers come from Gemini. Speech out is edge-tts, with an ElevenLabs switch when you want it.
+Two ways to run it:
+
+- **On this computer:** Python, the local microphone, faster-whisper, and edge-tts. Setup is below.
+- **On Vercel:** a Next.js page in this same repo. The browser listens and speaks. Gemini still answers. See [Web on Vercel](#web-on-vercel).
+
+Speech-to-text on the desktop app stays on this machine (faster-whisper). Answers come from Gemini. Speech out is edge-tts, with an ElevenLabs switch when you want it.
 
 ## English setup
 
@@ -68,9 +73,54 @@ python -m jarvis --list-devices
 python -m unittest discover -s tests
 ```
 
+The browser wake-word checks live next to the page:
+
+```bash
+npm test
+```
+
+## Web on Vercel
+
+The Python CLI needs a microphone process, faster-whisper, and edge-tts. That cannot stay running on Vercel serverless. The Next.js app at the repo root keeps the same conversation and leaves `python -m jarvis` unchanged.
+
+1. The page asks for the microphone and listens for **mulk**, **ملك**, or **Mulk Allah**.
+2. It says **Hi Mulk Allah!** and opens a session.
+3. Each spoken question is answered out loud. You do not say the wake word again.
+4. **Mute** or **Stop** (or **stop jarvis**, **goodbye**, **توقف**) returns to waiting for the wake word.
+5. Arabic and English. The **العربية / English** control is the browser speech-recognition language. Chrome and Edge are the ones that implement it. You can also type.
+
+Set the Vercel project to **Next.js** with the root directory `.` (this is already in `vercel.json`). Build command: `npm run build`.
+
+Environment variables for the web app:
+
+| Variable | Required | Role |
+| --- | --- | --- |
+| `GEMINI_API_KEY` or `GOOGLE_API_KEY` | yes, to answer | Same key as the CLI. Without it, the wake greeting still works. |
+| `GEMINI_MODEL` | no | Default `gemini-2.5-flash`. |
+| `TTS_PROVIDER` | no | `browser`, `gemini`, or `elevenlabs`. The CLI value `edge` cannot run here: a Gemini key uses Gemini TTS, otherwise the browser voice. |
+| `GEMINI_TTS_MODEL` | no | Default `gemini-2.5-flash-preview-tts`. |
+| `GEMINI_TTS_VOICE` | no | Default `Charon`. |
+| `ELEVENLABS_API_KEY`, `ELEVENLABS_VOICE_ID`, `ELEVENLABS_MODEL_ID` | only for ElevenLabs | Same names as the CLI. Set `TTS_PROVIDER=elevenlabs`. |
+
+If Gemini TTS or ElevenLabs fails, the page speaks with the browser voice.
+
+The public URL spends the Gemini quota of whoever holds the key. Do not share the deployment if the key is unrestricted.
+
+Local web check:
+
+```bash
+npm install
+npm run build
+npm run dev
+```
+
+`npm test` checks the wake and stop phrases against the same cases as the Python tests.
+
 ## العربية
 
 مساعد صوتي لملك الله السعدي. يبدأ بالاستماع فوراً. قل **mulk** أو **ملك** أو **ملك الله**، فيرد: **Hi Mulk Allah!** ثم أجب عن كل سؤال بالصوت دون إعادة كلمة التنبيه.
+
+على **Vercel** الصفحة نفسها في المتصفح (Chrome أو Edge): الميكروفون في المتصفح، والإجابة من Gemini. المفتاح `GEMINI_API_KEY` أو `GOOGLE_API_KEY`. النطق من Gemini TTS أو ElevenLabs إن وُجد المفتاح، وإلا صوت المتصفح. **Mute** أو **Stop** أو **توقف** يرجع إلى انتظار كلمة التنبيه. التفاصيل في [Web on Vercel](#web-on-vercel).
 
 التعرّف على الكلام محلي (Whisper). الإجابات من Gemini. النطق الافتراضي edge-tts، ويمكن لاحقاً ElevenLabs من ملف البيئة.
 
