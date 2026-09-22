@@ -529,6 +529,7 @@ export function JarvisApp() {
     };
 
     const arm = async () => {
+      engine.muted = false;
       engine.needsTap = false;
       engine.notice = "";
       engine.unsupported = false;
@@ -546,12 +547,17 @@ export function JarvisApp() {
       } catch {
         if (engine.closed) return;
         engine.needsTap = true;
-        engine.phase = "listening";
         engine.notice = "Allow the microphone to listen for mulk.";
+        if (!engine.muted) engine.phase = "listening";
         publish();
         return;
       }
       if (engine.closed) return;
+      if (engine.muted) {
+        engine.phase = "muted";
+        publish();
+        return;
+      }
       const Ctor = recognitionCtor();
       if (!Ctor) {
         engine.unsupported = true;
@@ -581,10 +587,6 @@ export function JarvisApp() {
         startRec(engine);
       },
       toggleMute: () => {
-        if (engine.needsTap) {
-          void arm();
-          return;
-        }
         if (engine.muted) {
           engine.muted = false;
           engine.mode = "wake";
@@ -750,12 +752,12 @@ export function JarvisApp() {
 }
 
 function statusLabel(view: View): string {
-  if (view.needsTap) return "Microphone off · الميكروفون مغلق";
   if (view.phase === "starting") return "Starting…";
   if (view.muted || view.phase === "muted") return "Muted · صامت";
   if (view.phase === "speaking") return "Speaking · يتكلم";
   if (view.phase === "thinking") return "Thinking · يفكر";
-  if (view.mode === "session") return "Listening · يستمع";
+  if (view.mode === "session") return view.needsTap ? "Session · جلسة" : "Listening · يستمع";
+  if (view.needsTap) return "Microphone off · الميكروفون مغلق";
   return "Listening for mulk · قل ملك";
 }
 
