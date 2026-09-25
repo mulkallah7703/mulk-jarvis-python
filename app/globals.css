@@ -1,15 +1,14 @@
 :root {
   color-scheme: dark;
-  --bg: #070b12;
-  --ink: #e8f7f8;
+  --bg: #000000;
+  --ink: #e8f4ff;
   --muted: #8aa4ad;
   --dim: #5e777f;
-  --cyan: #8ef6ff;
-  --cyan-deep: #143f4d;
-  --line: rgba(142, 246, 255, 0.22);
+  --cyan: #00e5ff;
+  --line: rgba(0, 229, 255, 0.28);
   --amber: #ffc56d;
   --danger: #ff9b9b;
-  --panel: rgba(12, 22, 34, 0.88);
+  --panel: rgba(0, 0, 0, 0.62);
 }
 
 * {
@@ -20,10 +19,7 @@ html,
 body {
   margin: 0;
   min-height: 100%;
-  background:
-    radial-gradient(900px 480px at 50% -10%, rgba(142, 246, 255, 0.14), transparent 60%),
-    radial-gradient(700px 420px at 100% 100%, rgba(255, 197, 109, 0.06), transparent 55%),
-    var(--bg);
+  background: #000;
   color: var(--ink);
   font-family: ui-sans-serif, "Segoe UI", sans-serif;
 }
@@ -31,6 +27,7 @@ body {
 body {
   min-height: 100vh;
   min-height: 100dvh;
+  background: #000;
 }
 
 button,
@@ -44,133 +41,145 @@ button {
 }
 
 .shell {
-  width: min(720px, calc(100% - 32px));
-  margin: 0 auto;
+  position: relative;
+  min-height: 100vh;
+  min-height: 100dvh;
+  background: #000;
+  overflow: hidden;
+}
+
+.jarvis-hologram-canvas {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  display: block;
+  width: 100vw;
+  height: 100vh;
+  height: 100dvh;
+  object-fit: contain;
+  object-position: center center;
+  background: #000;
+  cursor: crosshair;
+}
+
+.hud {
+  position: relative;
+  z-index: 2;
   min-height: 100vh;
   min-height: 100dvh;
   display: flex;
   flex-direction: column;
-  padding: 28px 0 calc(20px + env(safe-area-inset-bottom));
-  gap: 18px;
+  justify-content: space-between;
+  pointer-events: none;
+}
+
+.top-copy,
+.bottom-panel,
+.top-copy *,
+.bottom-panel * {
+  pointer-events: auto;
+}
+
+.top-copy {
+  padding: max(16px, env(safe-area-inset-top)) 20px 28px;
+  background: linear-gradient(to bottom, rgba(0, 0, 0, 0.78), rgba(0, 0, 0, 0.28) 72%, transparent);
 }
 
 .eyebrow {
   margin: 0;
   color: var(--cyan);
-  letter-spacing: 0.22em;
+  letter-spacing: 0.28em;
   text-transform: uppercase;
   font-size: 0.72rem;
+  text-shadow: 0 0 18px rgba(0, 229, 255, 0.35);
 }
 
 h1 {
-  margin: 4px 0 0;
-  font-size: clamp(2.4rem, 6vw, 3.4rem);
+  margin: 4px 0 8px;
+  font-size: clamp(1.6rem, 4vw, 2.2rem);
   font-weight: 560;
-  letter-spacing: -0.04em;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+}
+
+.instructions,
+.interim,
+.notice,
+.banner,
+.empty {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.45;
+}
+
+.instructions {
+  max-width: 68ch;
+  color: rgba(232, 244, 255, 0.86);
+  font-size: 0.92rem;
+  text-shadow: 0 1px 8px rgba(0, 0, 0, 0.85);
+}
+
+.bottom-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: min(760px, calc(100% - 24px));
+  margin: 0 auto;
+  padding: 28px 0 calc(16px + env(safe-area-inset-bottom));
+  background: linear-gradient(to top, rgba(0, 0, 0, 0.88) 55%, rgba(0, 0, 0, 0.2) 88%, transparent);
 }
 
 .stage {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 14px;
-  padding: 12px 0 4px;
-}
-
-.orb {
-  width: 168px;
-  height: 168px;
-  border-radius: 50%;
-  border: 1px solid var(--line);
-  background:
-    radial-gradient(circle at 50% 42%, rgba(142, 246, 255, 0.2), transparent 58%),
-    rgba(8, 16, 26, 0.9);
-  box-shadow: 0 0 0 10px rgba(142, 246, 255, 0.04), 0 20px 60px rgba(0, 0, 0, 0.35);
-  display: grid;
-  place-items: center;
-  position: relative;
-}
-
-.orb-core {
-  width: 54px;
-  height: 54px;
-  border-radius: 50%;
-  background: var(--cyan);
-  box-shadow: 0 0 24px rgba(142, 246, 255, 0.8);
-}
-
-.stage[data-phase="listening"] .orb,
-.stage[data-phase="starting"] .orb {
-  animation: pulse 2.6s ease-in-out infinite;
-}
-
-.stage[data-mode="session"][data-phase="listening"] .orb {
-  animation-duration: 1.5s;
-  border-color: rgba(142, 246, 255, 0.7);
-}
-
-.stage[data-phase="speaking"] .orb-core,
-.stage[data-phase="thinking"] .orb-core {
-  background: var(--amber);
-  box-shadow: 0 0 24px rgba(255, 197, 109, 0.75);
-}
-
-.stage[data-phase="speaking"] .orb {
-  animation: pulse 0.9s ease-in-out infinite;
-  border-color: rgba(255, 197, 109, 0.7);
-}
-
-.stage[data-phase="muted"] .orb-core,
-.stage[data-needs-tap="true"] .orb-core {
-  background: var(--dim);
-  box-shadow: none;
+  gap: 8px;
 }
 
 .status {
   margin: 0;
   font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
-  font-size: 0.95rem;
+  font-size: 0.82rem;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
   text-align: center;
-}
-
-.interim,
-.notice,
-.banner,
-.empty,
-.hint {
-  margin: 0;
-  color: var(--muted);
-  text-align: center;
-  line-height: 1.45;
+  color: rgba(0, 229, 255, 0.82);
 }
 
 .interim {
   min-height: 1.4em;
   color: var(--ink);
+  text-align: center;
 }
 
 .banner {
   color: var(--amber);
-  max-width: 46ch;
+  max-width: 52ch;
+  text-align: center;
 }
 
 .notice {
   color: var(--danger);
-  max-width: 46ch;
+  max-width: 52ch;
+  text-align: center;
 }
 
 .log {
-  flex: 1;
-  min-height: 140px;
-  max-height: min(36vh, 280px);
+  min-height: 72px;
+  max-height: min(24vh, 180px);
   overflow: auto;
   border: 1px solid var(--line);
-  border-radius: 18px;
+  border-radius: 16px;
   background: var(--panel);
-  padding: 14px 16px;
+  backdrop-filter: blur(10px);
+  padding: 12px 14px;
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 8px;
+}
+
+.empty {
+  text-align: center;
 }
 
 .line {
@@ -209,7 +218,7 @@ h1 {
 
 .composer input {
   border: 1px solid var(--line);
-  background: rgba(8, 16, 26, 0.75);
+  background: rgba(0, 0, 0, 0.72);
   border-radius: 999px;
   padding: 12px 16px;
   font-size: 16px;
@@ -217,7 +226,7 @@ h1 {
 }
 
 .composer input:focus {
-  border-color: rgba(142, 246, 255, 0.7);
+  border-color: rgba(0, 229, 255, 0.75);
 }
 
 .controls {
@@ -231,15 +240,16 @@ h1 {
 .composer button,
 .tap {
   border: 1px solid var(--line);
-  background: rgba(142, 246, 255, 0.06);
+  background: rgba(0, 229, 255, 0.08);
   border-radius: 999px;
   padding: 10px 14px;
+  backdrop-filter: blur(8px);
 }
 
 .controls button[aria-pressed="true"],
 .composer button {
-  background: rgba(142, 246, 255, 0.16);
-  border-color: rgba(142, 246, 255, 0.55);
+  background: rgba(0, 229, 255, 0.18);
+  border-color: rgba(0, 229, 255, 0.62);
 }
 
 button:disabled {
@@ -253,39 +263,28 @@ input:focus-visible {
   outline-offset: 2px;
 }
 
-.hint {
-  font-size: 0.85rem;
-}
-
-@keyframes pulse {
-  0%,
-  100% {
-    transform: scale(1);
-  }
-  50% {
-    transform: scale(1.035);
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .orb {
-    animation: none !important;
-  }
-}
-
 @media (max-width: 640px) {
-  .shell {
-    width: min(720px, calc(100% - 20px));
-    padding-top: 18px;
+  .top-copy {
+    padding-left: 14px;
+    padding-right: 14px;
   }
 
-  .orb {
-    width: 140px;
-    height: 140px;
+  .instructions {
+    font-size: 0.84rem;
+  }
+
+  .bottom-panel {
+    width: min(760px, calc(100% - 16px));
   }
 
   .line {
     grid-template-columns: 1fr;
     gap: 2px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .jarvis-hologram-canvas {
+    cursor: default;
   }
 }
