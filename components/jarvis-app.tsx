@@ -670,17 +670,26 @@ export function JarvisApp() {
 
   return (
     <main className="shell">
-      <ParticleHologram mode={hologramMode(view)} energy={hologramEnergy(view)} />
-      <div className="hud">
-        <header className="top-copy">
-          <p className="eyebrow">Mulk Allah</p>
-          <h1>Jarvis</h1>
-          <p className="instructions">
-            Use Chrome or Edge and allow the microphone. Say mulk or ملك to wake, then keep asking without
-            saying the wake word again. Say stop jarvis, goodbye, or توقف, or press Mute or Stop, to end. You can
-            also type. Esc stops the same way.
-          </p>
-        </header>
+      <aside className="brand-panel">
+        <p className="eyebrow">Mulk Allah</p>
+        <h1>Jarvis</h1>
+        <ul className="instructions">
+          <li>Use Chrome or Edge and allow the mic.</li>
+          <li>
+            Say <bdi dir="auto">mulk</bdi> or <bdi dir="auto">ملك</bdi> to wake.
+          </li>
+          <li>Keep asking without the wake word.</li>
+          <li>
+            Say <bdi dir="auto">stop jarvis</bdi>, <bdi dir="auto">goodbye</bdi>, or <bdi dir="auto">توقف</bdi>, or
+            press Mute or Stop, to end.
+          </li>
+          <li>You can also type.</li>
+          <li>Esc stops too.</li>
+        </ul>
+      </aside>
+      <div className="stage-wrap">
+        <ParticleHologram mode={hologramMode(view)} energy={hologramEnergy(view)} />
+        <div className="hud">
         <div className="bottom-panel">
           <section
             className="stage"
@@ -755,6 +764,7 @@ export function JarvisApp() {
               Stop
             </button>
           </div>
+        </div>
         </div>
       </div>
     </main>

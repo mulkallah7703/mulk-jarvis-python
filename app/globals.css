@@ -41,21 +41,45 @@ button {
 }
 
 .shell {
-  position: relative;
+  display: flex;
+  flex-direction: row;
+  align-items: stretch;
+  height: 100vh;
+  height: 100dvh;
   min-height: 100vh;
   min-height: 100dvh;
   background: #000;
   overflow: hidden;
 }
 
+.brand-panel {
+  flex: 0 0 260px;
+  width: 260px;
+  height: 100%;
+  min-width: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  padding: max(20px, env(safe-area-inset-top)) 18px 20px max(16px, env(safe-area-inset-left));
+  background: rgba(0, 0, 0, 0.82);
+  border-right: 1px solid rgba(0, 229, 255, 0.18);
+  z-index: 3;
+}
+
+.stage-wrap {
+  position: relative;
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 100%;
+}
+
 .jarvis-hologram-canvas {
-  position: fixed;
+  position: absolute;
   inset: 0;
   z-index: 0;
   display: block;
-  width: 100vw;
-  height: 100vh;
-  height: 100dvh;
+  width: 100%;
+  height: 100%;
+  max-width: 100%;
   object-fit: contain;
   object-position: center center;
   background: #000;
@@ -63,46 +87,62 @@ button {
 }
 
 .hud {
-  position: relative;
+  position: absolute;
+  inset: 0;
   z-index: 2;
-  min-height: 100vh;
-  min-height: 100dvh;
   display: flex;
   flex-direction: column;
-  justify-content: space-between;
+  justify-content: flex-end;
   pointer-events: none;
 }
 
-.top-copy,
 .bottom-panel,
-.top-copy *,
 .bottom-panel * {
   pointer-events: auto;
-}
-
-.top-copy {
-  padding: max(16px, env(safe-area-inset-top)) 20px 28px;
-  background: linear-gradient(to bottom, rgba(0, 0, 0, 0.78), rgba(0, 0, 0, 0.28) 72%, transparent);
 }
 
 .eyebrow {
   margin: 0;
   color: var(--cyan);
-  letter-spacing: 0.28em;
+  letter-spacing: 0.18em;
   text-transform: uppercase;
   font-size: 0.72rem;
+  line-height: 1.4;
   text-shadow: 0 0 18px rgba(0, 229, 255, 0.35);
+  overflow-wrap: break-word;
 }
 
 h1 {
-  margin: 4px 0 8px;
-  font-size: clamp(1.6rem, 4vw, 2.2rem);
+  margin: 8px 0 16px;
+  max-width: 100%;
+  font-size: 1.45rem;
   font-weight: 560;
-  letter-spacing: 0.18em;
+  letter-spacing: 0.08em;
+  line-height: 1.15;
   text-transform: uppercase;
+  overflow-wrap: anywhere;
 }
 
-.instructions,
+.instructions {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  color: rgba(232, 244, 255, 0.88);
+  font-size: 0.92rem;
+  line-height: 1.45;
+  overflow-wrap: break-word;
+  word-break: normal;
+}
+
+.instructions li {
+  margin: 0;
+  white-space: normal;
+  overflow: visible;
+}
+
 .interim,
 .notice,
 .banner,
@@ -110,13 +150,6 @@ h1 {
   margin: 0;
   color: var(--muted);
   line-height: 1.45;
-}
-
-.instructions {
-  max-width: 68ch;
-  color: rgba(232, 244, 255, 0.86);
-  font-size: 0.92rem;
-  text-shadow: 0 1px 8px rgba(0, 0, 0, 0.85);
 }
 
 .bottom-panel {
@@ -263,14 +296,36 @@ input:focus-visible {
   outline-offset: 2px;
 }
 
-@media (max-width: 640px) {
-  .top-copy {
-    padding-left: 14px;
-    padding-right: 14px;
+@media (max-width: 720px) {
+  .shell {
+    flex-direction: column;
+    height: auto;
+    min-height: 100dvh;
+    overflow: auto;
+  }
+
+  .brand-panel {
+    flex: 0 0 auto;
+    width: 100%;
+    height: auto;
+    overflow: visible;
+    border-right: none;
+    border-bottom: 1px solid rgba(0, 229, 255, 0.18);
+    padding: max(16px, env(safe-area-inset-top)) 16px 16px max(14px, env(safe-area-inset-left));
+  }
+
+  h1 {
+    font-size: 1.7rem;
   }
 
   .instructions {
-    font-size: 0.84rem;
+    font-size: 0.95rem;
+  }
+
+  .stage-wrap {
+    flex: 1 0 auto;
+    height: auto;
+    min-height: 72dvh;
   }
 
   .bottom-panel {
