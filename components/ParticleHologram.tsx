@@ -14,7 +14,7 @@ const MOUSE_F = 5;
 const RETURN = 0.08;
 const PORTRAIT_SRC = "/jarvis-portrait.png";
 
-const THINK_YAW = (13 * Math.PI) / 180;
+const THINK_YAW = (15 * Math.PI) / 180;
 const THINK_PERIOD = 3000;
 const IDLE_YAW = (1.7 * Math.PI) / 180;
 const LISTEN_ROLL = (2.6 * Math.PI) / 180;
@@ -185,7 +185,7 @@ function buildPose(
       if (ell < 1 && y <= chinY) depth[i] = (1 - ell) ** 0.55;
     }
   }
-  return { depth, head, headCx, headCy, zAmp: headRx * 1.65 };
+  return { depth, head, headCx, headCy, zAmp: headRx * 1.7 };
 }
 
 type Props = {
@@ -312,7 +312,8 @@ export default function ParticleHologram({ mode = "idle", energy = 0 }: Props) {
         const influence = p.head[i];
         const lx = p.hx[i] - headCx;
         const ly = p.hy[i] - headCy;
-        let ox = lx + influence * (lx * yawScale + p.depth[i] * zPush);
+        const lead = p.depth[i] * zPush + influence * zAmp * 0.34 * sinY;
+        let ox = lx + influence * lx * yawScale + lead;
         let oy = ly + influence * nod + breathe * (0.28 + 0.72 * influence);
         if (influence > 0.001 && roll !== 0) {
           const rolledX = ox * cosR - oy * sinR;
