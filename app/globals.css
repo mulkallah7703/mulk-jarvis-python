@@ -53,33 +53,34 @@ button {
 }
 
 .brand-panel {
+  position: relative;
   flex: 0 0 260px;
   width: 260px;
   height: 100%;
   min-width: 0;
-  overflow-x: hidden;
-  overflow-y: auto;
+  overflow: visible;
   padding: max(20px, env(safe-area-inset-top)) 18px 20px max(16px, env(safe-area-inset-left));
-  background: rgba(0, 0, 0, 0.82);
-  border-right: 1px solid rgba(0, 229, 255, 0.18);
+  background: transparent;
+  border: none;
   z-index: 3;
 }
 
 .stage-wrap {
   position: relative;
+  z-index: 1;
   flex: 1 1 auto;
   min-width: 0;
   height: 100%;
 }
 
 .jarvis-hologram-canvas {
-  position: absolute;
+  position: fixed;
   inset: 0;
   z-index: 0;
   display: block;
-  width: 100%;
-  height: 100%;
-  max-width: 100%;
+  width: 100vw;
+  height: 100vh;
+  height: 100dvh;
   object-fit: contain;
   object-position: center center;
   background: #000;
@@ -108,7 +109,7 @@ button {
   text-transform: uppercase;
   font-size: 0.72rem;
   line-height: 1.4;
-  text-shadow: 0 0 18px rgba(0, 229, 255, 0.35);
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.95), 0 0 10px rgba(0, 0, 0, 0.8);
   overflow-wrap: break-word;
 }
 
@@ -121,6 +122,7 @@ h1 {
   line-height: 1.15;
   text-transform: uppercase;
   overflow-wrap: anywhere;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.95), 0 0 10px rgba(0, 0, 0, 0.8);
 }
 
 .instructions {
@@ -141,6 +143,7 @@ h1 {
   margin: 0;
   white-space: normal;
   overflow: visible;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.95), 0 0 10px rgba(0, 0, 0, 0.8);
 }
 
 .interim,
@@ -309,8 +312,8 @@ input:focus-visible {
     width: 100%;
     height: auto;
     overflow: visible;
-    border-right: none;
-    border-bottom: 1px solid rgba(0, 229, 255, 0.18);
+    background: transparent;
+    border: none;
     padding: max(16px, env(safe-area-inset-top)) 16px 16px max(14px, env(safe-area-inset-left));
   }
 
