@@ -354,6 +354,8 @@ function bestTranscript(result: SpeechResult, mode: Mode): string {
 export function JarvisApp() {
   const [view, setView] = useState<View>(() => snapshot(createEngine()));
   const [draft, setDraft] = useState("");
+  const [chatOpen, setChatOpen] = useState(false);
+  const [seenReplyId, setSeenReplyId] = useState(0);
   const api = useRef<Api | null>(null);
 
   useEffect(() => {
@@ -659,6 +661,15 @@ export function JarvisApp() {
     };
   }, []);
 
+  const latestReplyId = view.lines.reduce(
+    (max, line) => (line.who === "jarvis" && line.id > max ? line.id : max),
+    0,
+  );
+  useEffect(() => {
+    if (chatOpen) setSeenReplyId(latestReplyId);
+  }, [chatOpen, latestReplyId]);
+  const unreadReply = !chatOpen && latestReplyId > seenReplyId;
+
   const status = statusLabel(view);
   const onSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -688,86 +699,119 @@ export function JarvisApp() {
           <li>Esc stops too.</li>
         </ul>
       </aside>
+      <button
+        type="button"
+        className="chat-toggle"
+        aria-expanded={chatOpen}
+        aria-controls="chat-panel"
+        aria-label={chatOpen ? "Close chat" : "Open chat"}
+        onClick={() => setChatOpen((open) => !open)}
+      >
+        <ChatIcon />
+        {unreadReply ? <span className="unread-dot" /> : null}
+      </button>
+      <aside id="chat-panel" className="chat-panel" hidden={!chatOpen}>
+        <div className="chat-panel-head">
+          <p className="chat-panel-title">Chat</p>
+          <button type="button" className="chat-close" aria-label="Close chat" onClick={() => setChatOpen(false)}>
+            Close
+          </button>
+        </div>
+        <section className="log" aria-live="polite">
+          {view.lines.length === 0 ? (
+            <p className="empty">Say mulk, ملك, or Mulk Allah.</p>
+          ) : (
+            view.lines.map((line) => (
+              <p key={line.id} className={`line line-${line.who}`}>
+                <span className="who">{line.who === "jarvis" ? "Jarvis" : line.who === "you" ? "You" : "Heard"}</span>
+                <span>{line.text}</span>
+              </p>
+            ))
+          )}
+        </section>
+        <form className="composer" onSubmit={onSubmit}>
+          <input
+            value={draft}
+            onChange={(event) => setDraft(event.target.value)}
+            placeholder={view.mode === "session" ? "Ask in Arabic or English" : "Type mulk, then a question"}
+            aria-label="Type instead of speaking"
+            autoComplete="off"
+            enterKeyHint="send"
+            disabled={view.phase === "starting"}
+          />
+          <button type="submit" disabled={view.busy || view.phase === "starting" || !draft.trim()}>
+            Send
+          </button>
+        </form>
+      </aside>
       <div className="stage-wrap">
         <div className="hud">
-        <div className="bottom-panel">
-          <section
-            className="stage"
-            data-phase={view.phase}
-            data-mode={view.mode}
-            data-needs-tap={view.needsTap ? "true" : "false"}
-          >
-            <p className="status" role="status">
-              {status}
-            </p>
-            <p className="interim" aria-hidden={view.interim ? undefined : true}>
-              {view.interim}
-            </p>
-            {view.hasKey === false ? (
-              <p className="banner">Add a Gemini API key to answer questions. Wake word still works.</p>
-            ) : null}
-            {view.notice ? <p className="notice">{view.notice}</p> : null}
-            {view.needsTap ? (
-              <button type="button" className="tap" onClick={() => api.current?.arm()}>
-                Enable microphone
-              </button>
-            ) : null}
-          </section>
-          <section className="log" aria-live="polite">
-            {view.lines.length === 0 ? (
-              <p className="empty">Say mulk, ملك, or Mulk Allah.</p>
-            ) : (
-              view.lines.map((line) => (
-                <p key={line.id} className={`line line-${line.who}`}>
-                  <span className="who">{line.who === "jarvis" ? "Jarvis" : line.who === "you" ? "You" : "Heard"}</span>
-                  <span>{line.text}</span>
-                </p>
-              ))
-            )}
-          </section>
-          <form className="composer" onSubmit={onSubmit}>
-            <input
-              value={draft}
-              onChange={(event) => setDraft(event.target.value)}
-              placeholder={view.mode === "session" ? "Ask in Arabic or English" : "Type mulk, then a question"}
-              aria-label="Type instead of speaking"
-              autoComplete="off"
-              enterKeyHint="send"
-              disabled={view.phase === "starting"}
-            />
-            <button type="submit" disabled={view.busy || view.phase === "starting" || !draft.trim()}>
-              Send
-            </button>
-          </form>
-          <div className="controls">
-            <button
-              type="button"
-              aria-label={view.needsTap || view.muted ? "Enable microphone" : "Microphone is listening"}
-              aria-pressed={view.muted}
-              onClick={() => {
-                if (view.needsTap) api.current?.arm();
-                else if (view.muted) api.current?.toggleMute();
-              }}
+          <div className="voice-dock">
+            <section
+              className="stage"
+              data-phase={view.phase}
+              data-mode={view.mode}
+              data-needs-tap={view.needsTap ? "true" : "false"}
             >
-              {view.needsTap ? "Mic" : view.muted ? "Mic off" : "Mic"}
-            </button>
-            <button type="button" aria-pressed={view.lang === "ar-SA"} onClick={() => api.current?.setLang("ar-SA")}>
-              العربية
-            </button>
-            <button type="button" aria-pressed={view.lang === "en-US"} onClick={() => api.current?.setLang("en-US")}>
-              English
-            </button>
-            <button type="button" onClick={() => api.current?.toggleMute()}>
-              {view.muted ? "Unmute" : "Mute"}
-            </button>
-            <button type="button" onClick={() => api.current?.stop()}>
-              Stop
-            </button>
+              <p className="status" role="status">
+                {status}
+              </p>
+              <p className="interim" aria-hidden={view.interim ? undefined : true}>
+                {view.interim}
+              </p>
+              {view.hasKey === false ? (
+                <p className="banner">Add a Gemini API key to answer questions. Wake word still works.</p>
+              ) : null}
+              {view.notice ? <p className="notice">{view.notice}</p> : null}
+              {view.needsTap ? (
+                <button type="button" className="tap" onClick={() => api.current?.arm()}>
+                  Enable microphone
+                </button>
+              ) : null}
+            </section>
+            <div className="controls">
+              <button
+                type="button"
+                aria-label={view.needsTap || view.muted ? "Enable microphone" : "Microphone is listening"}
+                aria-pressed={view.muted}
+                onClick={() => {
+                  if (view.needsTap) api.current?.arm();
+                  else if (view.muted) api.current?.toggleMute();
+                }}
+              >
+                {view.needsTap ? "Mic" : view.muted ? "Mic off" : "Mic"}
+              </button>
+              <button type="button" aria-pressed={view.lang === "ar-SA"} onClick={() => api.current?.setLang("ar-SA")}>
+                العربية
+              </button>
+              <button type="button" aria-pressed={view.lang === "en-US"} onClick={() => api.current?.setLang("en-US")}>
+                English
+              </button>
+              <button type="button" onClick={() => api.current?.toggleMute()}>
+                {view.muted ? "Unmute" : "Mute"}
+              </button>
+              <button type="button" onClick={() => api.current?.stop()}>
+                Stop
+              </button>
+            </div>
           </div>
-        </div>
         </div>
       </div>
     </main>
+  );
+}
+
+function ChatIcon() {
+  return (
+    <svg width="22" height="22" viewBox="0 0 24 24" aria-hidden="true">
+      <path
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.7"
+        strokeLinejoin="round"
+        d="M4.5 6.8A2.3 2.3 0 0 1 6.8 4.5h10.4A2.3 2.3 0 0 1 19.5 6.8v6.4a2.3 2.3 0 0 1-2.3 2.3H9.2L4.5 19.2V6.8z"
+      />
+    </svg>
   );
 }
 
