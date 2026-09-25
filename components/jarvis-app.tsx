@@ -2,6 +2,8 @@
 
 import { useEffect, useRef, useState, type FormEvent } from "react";
 
+import ParticleHologram from "@/components/ParticleHologram";
+import type { OrbState } from "@/components/orb-state";
 import {
   EMPTY_ANSWER,
   GREETING,
@@ -668,87 +670,110 @@ export function JarvisApp() {
 
   return (
     <main className="shell">
-      <header>
-        <p className="eyebrow">Mulk Allah</p>
-        <h1>Jarvis</h1>
-      </header>
-      <section
-        className="stage"
-        data-phase={view.phase}
-        data-mode={view.mode}
-        data-needs-tap={view.needsTap ? "true" : "false"}
-      >
-        <button
-          type="button"
-          className="orb"
-          aria-label={view.needsTap || view.muted ? "Enable microphone" : "Microphone is listening"}
-          aria-pressed={view.muted}
-          onClick={() => {
-            if (view.needsTap) api.current?.arm();
-            else if (view.muted) api.current?.toggleMute();
-          }}
-        >
-          <span className="orb-core" />
-        </button>
-        <p className="status" role="status">
-          {status}
-        </p>
-        <p className="interim" aria-hidden={view.interim ? undefined : true}>
-          {view.interim}
-        </p>
-        {view.hasKey === false ? (
-          <p className="banner">Add a Gemini API key to answer questions. Wake word still works.</p>
-        ) : null}
-        {view.notice ? <p className="notice">{view.notice}</p> : null}
-        {view.needsTap ? (
-          <button type="button" className="tap" onClick={() => api.current?.arm()}>
-            Enable microphone
-          </button>
-        ) : null}
-      </section>
-      <section className="log" aria-live="polite">
-        {view.lines.length === 0 ? (
-          <p className="empty">Say mulk, ملك, or Mulk Allah.</p>
-        ) : (
-          view.lines.map((line) => (
-            <p key={line.id} className={`line line-${line.who}`}>
-              <span className="who">{line.who === "jarvis" ? "Jarvis" : line.who === "you" ? "You" : "Heard"}</span>
-              <span>{line.text}</span>
+      <ParticleHologram mode={hologramMode(view)} energy={hologramEnergy(view)} />
+      <div className="hud">
+        <header className="top-copy">
+          <p className="eyebrow">Mulk Allah</p>
+          <h1>Jarvis</h1>
+          <p className="instructions">
+            Use Chrome or Edge and allow the microphone. Say mulk or ملك to wake, then keep asking without
+            saying the wake word again. Say stop jarvis, goodbye, or توقف, or press Mute or Stop, to end. You can
+            also type. Esc stops the same way.
+          </p>
+        </header>
+        <div className="bottom-panel">
+          <section
+            className="stage"
+            data-phase={view.phase}
+            data-mode={view.mode}
+            data-needs-tap={view.needsTap ? "true" : "false"}
+          >
+            <p className="status" role="status">
+              {status}
             </p>
-          ))
-        )}
-      </section>
-      <form className="composer" onSubmit={onSubmit}>
-        <input
-          value={draft}
-          onChange={(event) => setDraft(event.target.value)}
-          placeholder={view.mode === "session" ? "Ask in Arabic or English" : "Type mulk, then a question"}
-          aria-label="Type instead of speaking"
-          autoComplete="off"
-          enterKeyHint="send"
-          disabled={view.phase === "starting"}
-        />
-        <button type="submit" disabled={view.busy || view.phase === "starting" || !draft.trim()}>
-          Send
-        </button>
-      </form>
-      <div className="controls">
-        <button type="button" aria-pressed={view.lang === "ar-SA"} onClick={() => api.current?.setLang("ar-SA")}>
-          العربية
-        </button>
-        <button type="button" aria-pressed={view.lang === "en-US"} onClick={() => api.current?.setLang("en-US")}>
-          English
-        </button>
-        <button type="button" onClick={() => api.current?.toggleMute()}>
-          {view.muted ? "Unmute" : "Mute"}
-        </button>
-        <button type="button" onClick={() => api.current?.stop()}>
-          Stop
-        </button>
+            <p className="interim" aria-hidden={view.interim ? undefined : true}>
+              {view.interim}
+            </p>
+            {view.hasKey === false ? (
+              <p className="banner">Add a Gemini API key to answer questions. Wake word still works.</p>
+            ) : null}
+            {view.notice ? <p className="notice">{view.notice}</p> : null}
+            {view.needsTap ? (
+              <button type="button" className="tap" onClick={() => api.current?.arm()}>
+                Enable microphone
+              </button>
+            ) : null}
+          </section>
+          <section className="log" aria-live="polite">
+            {view.lines.length === 0 ? (
+              <p className="empty">Say mulk, ملك, or Mulk Allah.</p>
+            ) : (
+              view.lines.map((line) => (
+                <p key={line.id} className={`line line-${line.who}`}>
+                  <span className="who">{line.who === "jarvis" ? "Jarvis" : line.who === "you" ? "You" : "Heard"}</span>
+                  <span>{line.text}</span>
+                </p>
+              ))
+            )}
+          </section>
+          <form className="composer" onSubmit={onSubmit}>
+            <input
+              value={draft}
+              onChange={(event) => setDraft(event.target.value)}
+              placeholder={view.mode === "session" ? "Ask in Arabic or English" : "Type mulk, then a question"}
+              aria-label="Type instead of speaking"
+              autoComplete="off"
+              enterKeyHint="send"
+              disabled={view.phase === "starting"}
+            />
+            <button type="submit" disabled={view.busy || view.phase === "starting" || !draft.trim()}>
+              Send
+            </button>
+          </form>
+          <div className="controls">
+            <button
+              type="button"
+              aria-label={view.needsTap || view.muted ? "Enable microphone" : "Microphone is listening"}
+              aria-pressed={view.muted}
+              onClick={() => {
+                if (view.needsTap) api.current?.arm();
+                else if (view.muted) api.current?.toggleMute();
+              }}
+            >
+              {view.needsTap ? "Mic" : view.muted ? "Mic off" : "Mic"}
+            </button>
+            <button type="button" aria-pressed={view.lang === "ar-SA"} onClick={() => api.current?.setLang("ar-SA")}>
+              العربية
+            </button>
+            <button type="button" aria-pressed={view.lang === "en-US"} onClick={() => api.current?.setLang("en-US")}>
+              English
+            </button>
+            <button type="button" onClick={() => api.current?.toggleMute()}>
+              {view.muted ? "Unmute" : "Mute"}
+            </button>
+            <button type="button" onClick={() => api.current?.stop()}>
+              Stop
+            </button>
+          </div>
+        </div>
       </div>
-      <p className="hint">After mulk, keep talking. Say stop jarvis, goodbye, or توقف to wait again. Esc does the same.</p>
     </main>
   );
+}
+
+function hologramMode(view: View): OrbState {
+  if (view.phase === "thinking") return "thinking";
+  if (view.phase === "speaking") return "speaking";
+  if (view.phase === "listening" && view.mode === "session" && !view.muted && !view.needsTap) return "listening";
+  return "idle";
+}
+
+function hologramEnergy(view: View): number {
+  if (view.phase === "speaking") return 0.8;
+  if (view.phase === "thinking") return 0.4;
+  if (view.interim.trim()) return 0.6;
+  if (view.phase === "listening" && view.mode === "session") return 0.18;
+  return 0;
 }
 
 function statusLabel(view: View): string {
