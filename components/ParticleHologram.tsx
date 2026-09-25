@@ -14,11 +14,6 @@ const MOUSE_F = 5;
 const RETURN = 0.08;
 const PORTRAIT_SRC = "/jarvis-portrait.png";
 
-const THINK_YAW = (13 * Math.PI) / 180;
-const THINK_PERIOD = 3000;
-const IDLE_YAW = (1.7 * Math.PI) / 180;
-const LISTEN_ROLL = (2.6 * Math.PI) / 180;
-
 type Particles = {
   hx: Float32Array;
   hy: Float32Array;
@@ -30,163 +25,7 @@ type Particles = {
   g: Uint8Array;
   b: Uint8Array;
   ph: Float32Array;
-  depth: Float32Array;
-  head: Float32Array;
 };
-
-type Pose = {
-  depth: Float32Array;
-  head: Float32Array;
-  headCx: number;
-  headCy: number;
-  zAmp: number;
-};
-
-function buildPose(
-  hx: Float32Array,
-  hy: Float32Array,
-  rr: Uint8Array,
-  gg: Uint8Array,
-  bb: Uint8Array,
-  n: number,
-  width: number,
-  height: number,
-): Pose {
-  const cellSize = 20;
-  const cols = Math.ceil(width / cellSize);
-  const rows = Math.ceil(height / cellSize);
-  const bright = new Float32Array(cols * rows);
-  const cell = new Uint32Array(n);
-  for (let i = 0; i < n; i++) {
-    const cx = Math.min(cols - 1, (hx[i] / cellSize) | 0);
-    const cy = Math.min(rows - 1, (hy[i] / cellSize) | 0);
-    const id = cy * cols + cx;
-    cell[i] = id;
-    const lit = rr[i] > gg[i] ? (rr[i] > bb[i] ? rr[i] : bb[i]) : gg[i] > bb[i] ? gg[i] : bb[i];
-    bright[id] += lit;
-  }
-  const ranked = Float32Array.from(bright);
-  ranked.sort();
-  const threshold = ranked[Math.floor(ranked.length * 0.9)] || 1;
-  const label = new Int16Array(bright.length);
-  label.fill(-1);
-  const stack: number[] = [];
-  let bestLabel = -1;
-  let bestSize = 0;
-  let nextLabel = 0;
-  for (let start = 0; start < bright.length; start++) {
-    if (bright[start] < threshold || label[start] !== -1) continue;
-    const mark = nextLabel;
-    nextLabel += 1;
-    let size = 0;
-    stack.push(start);
-    label[start] = mark;
-    while (stack.length) {
-      const id = stack.pop() as number;
-      size += 1;
-      const cx = id % cols;
-      const cy = (id / cols) | 0;
-      if (cx > 0) {
-        const left = id - 1;
-        if (bright[left] >= threshold && label[left] === -1) {
-          label[left] = mark;
-          stack.push(left);
-        }
-      }
-      if (cx + 1 < cols) {
-        const right = id + 1;
-        if (bright[right] >= threshold && label[right] === -1) {
-          label[right] = mark;
-          stack.push(right);
-        }
-      }
-      if (cy > 0) {
-        const up = id - cols;
-        if (bright[up] >= threshold && label[up] === -1) {
-          label[up] = mark;
-          stack.push(up);
-        }
-      }
-      if (cy + 1 < rows) {
-        const down = id + cols;
-        if (bright[down] >= threshold && label[down] === -1) {
-          label[down] = mark;
-          stack.push(down);
-        }
-      }
-    }
-    if (size > bestSize) {
-      bestSize = size;
-      bestLabel = mark;
-    }
-  }
-  const depth = new Float32Array(n);
-  const head = new Float32Array(n);
-  let headCx = width * 0.5;
-  let headCy = height * 0.38;
-  let headRx = width * 0.12;
-  let headRy = height * 0.2;
-  if (bestSize > 8) {
-    let minX = width;
-    let maxX = 0;
-    let minY = height;
-    let maxY = 0;
-    for (let i = 0; i < n; i++) {
-      if (label[cell[i]] !== bestLabel) continue;
-      const x = hx[i];
-      const y = hy[i];
-      if (x < minX) minX = x;
-      if (x > maxX) maxX = x;
-      if (y < minY) minY = y;
-      if (y > maxY) maxY = y;
-    }
-    const bodyH = Math.max(1, maxY - minY);
-    const chinY = minY + bodyH * 0.5;
-    let sx = 0;
-    let sy = 0;
-    let sn = 0;
-    for (let i = 0; i < n; i++) {
-      if (label[cell[i]] !== bestLabel || hy[i] > chinY) continue;
-      sx += hx[i];
-      sy += hy[i];
-      sn += 1;
-    }
-    if (sn > 20) {
-      headCx = sx / sn;
-      headCy = sy / sn;
-      let varX = 0;
-      let varY = 0;
-      for (let i = 0; i < n; i++) {
-        if (label[cell[i]] !== bestLabel || hy[i] > chinY) continue;
-        const dx = hx[i] - headCx;
-        const dy = hy[i] - headCy;
-        varX += dx * dx;
-        varY += dy * dy;
-      }
-      headRx = Math.min(width * 0.22, Math.max(40, Math.sqrt(varX / sn) * 1.7));
-      headRy = Math.min(height * 0.38, Math.max(40, Math.sqrt(varY / sn) * 1.7));
-    }
-    const fadeH = bodyH * 0.18;
-    for (let i = 0; i < n; i++) {
-      if (label[cell[i]] !== bestLabel) continue;
-      const x = hx[i];
-      const y = hy[i];
-      const ndx = (x - headCx) / headRx;
-      const ndy = (y - headCy) / headRy;
-      const ell = ndx * ndx + ndy * ndy;
-      let influence = 0;
-      if (y <= chinY) {
-        const edge = Math.abs(ndx);
-        influence = edge <= 1.08 ? 1 : Math.max(0, 1 - (edge - 1.08) / 0.45);
-      } else {
-        influence = Math.max(0, 1 - (y - chinY) / fadeH) * 0.14;
-      }
-      head[i] = influence;
-      if (ell < 1 && y <= chinY) depth[i] = (1 - ell) ** 0.55;
-    }
-  }
-  return { depth, head, headCx, headCy, zAmp: headRx * 1.65 };
-}
 
 type Props = {
   mode?: OrbState;
@@ -216,15 +55,10 @@ export default function ParticleHologram({ mode = "idle", energy = 0 }: Props) {
     let particles: Particles | null = null;
     let raf = 0;
     let alive = true;
-    let headCx = 0;
-    let headCy = 0;
-    let zAmp = 0;
-    const blend = { turn: 0, listen: 0, speak: 0, last: 0 };
     const mouse = { x: -9999, y: -9999 };
     const reduced =
       typeof window !== "undefined" &&
       window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    const motion = reduced ? 0.22 : 1;
 
     const img = new Image();
     img.decoding = "async";
@@ -278,50 +112,21 @@ export default function ParticleHologram({ mode = "idle", energy = 0 }: Props) {
       const scan = ((t * SCAN_SPEED * scanMul) % 1.6) - 0.3;
       const flicker = Math.random() < flickerChance ? 0.75 : 1.0;
       const R2 = MOUSE_R * MOUSE_R;
-      const jitter = JITTER * jitterMul * (reduced ? 0.35 : 1);
-      const shimmer = SHIMMER * shimmerMul * (reduced ? 0.4 : 1);
-      const dt = blend.last ? Math.min(48, t - blend.last) : 16;
-      blend.last = t;
-      const ease = 1 - Math.exp(-dt / 420);
-      blend.turn += ((st === "thinking" ? 1 : 0) - blend.turn) * ease;
-      blend.listen += ((st === "listening" ? 1 : 0) - blend.listen) * ease;
-      blend.speak += ((st === "speaking" ? 1 : 0) - blend.speak) * ease;
-      const yawThink = Math.sin((t * Math.PI * 2) / THINK_PERIOD) * THINK_YAW;
-      const yawIdle = Math.sin(t * 0.00062) * IDLE_YAW;
-      const yaw = (yawIdle * (1 - blend.turn) + yawThink * blend.turn) * motion;
-      const cosY = Math.cos(yaw);
-      const sinY = Math.sin(yaw);
-      const yawScale = cosY - 1;
-      const zPush = zAmp * sinY;
-      const roll = blend.listen * Math.sin(t * 0.00115) * LISTEN_ROLL * motion;
-      const cosR = Math.cos(roll);
-      const sinR = Math.sin(roll);
-      const nod = blend.speak * Math.sin(t * 0.0082) * 3.4 * motion;
-      const breathe = Math.sin(t * 0.00125) * 1.2 * motion;
+      const jitter = JITTER * jitterMul;
+      const shimmer = SHIMMER * shimmerMul;
 
       for (let i = 0; i < N; i++) {
-        const mx = p.x[i] - mouse.x;
-        const my = p.y[i] - mouse.y;
-        const d2 = mx * mx + my * my;
+        const dx = p.x[i] - mouse.x;
+        const dy = p.y[i] - mouse.y;
+        const d2 = dx * dx + dy * dy;
         if (d2 < R2 && d2 > 0.01) {
           const d = Math.sqrt(d2);
           const f = ((1 - d / MOUSE_R) * MOUSE_F) / d;
-          p.vx[i] += mx * f;
-          p.vy[i] += my * f;
+          p.vx[i] += dx * f;
+          p.vy[i] += dy * f;
         }
-        const influence = p.head[i];
-        const lx = p.hx[i] - headCx;
-        const ly = p.hy[i] - headCy;
-        let ox = lx + influence * (lx * yawScale + p.depth[i] * zPush);
-        let oy = ly + influence * nod + breathe * (0.28 + 0.72 * influence);
-        if (influence > 0.001 && roll !== 0) {
-          const rolledX = ox * cosR - oy * sinR;
-          const rolledY = ox * sinR + oy * cosR;
-          ox += (rolledX - ox) * influence;
-          oy += (rolledY - oy) * influence;
-        }
-        p.vx[i] += (headCx + ox - p.x[i]) * RETURN;
-        p.vy[i] += (headCy + oy - p.y[i]) * RETURN;
+        p.vx[i] += (p.hx[i] - p.x[i]) * RETURN;
+        p.vy[i] += (p.hy[i] - p.y[i]) * RETURN;
         p.vx[i] *= 0.82;
         p.vy[i] *= 0.82;
         p.x[i] += p.vx[i];
@@ -346,6 +151,16 @@ export default function ParticleHologram({ mode = "idle", energy = 0 }: Props) {
       }
       gfx.putImageData(buf, 0, 0);
       raf = requestAnimationFrame(frame);
+    }
+
+    function paintStatic() {
+      if (!particles || !buf || !data32) return;
+      data32.fill(0xff000000);
+      const p = particles;
+      for (let i = 0; i < N; i++) {
+        plot(p.hx[i], p.hy[i], p.r[i], p.g[i], p.b[i]);
+      }
+      gfx.putImageData(buf, 0, 0);
     }
 
     img.onload = () => {
@@ -396,18 +211,11 @@ export default function ParticleHologram({ mode = "idle", energy = 0 }: Props) {
         g: Uint8Array.from(pg),
         b: Uint8Array.from(pb),
         ph: Float32Array.from(ph),
-        depth: new Float32Array(0),
-        head: new Float32Array(0),
       };
-      const pose = buildPose(particles.hx, particles.hy, particles.r, particles.g, particles.b, N, W, H);
-      particles.depth = pose.depth;
-      particles.head = pose.head;
-      headCx = pose.headCx;
-      headCy = pose.headCy;
-      zAmp = pose.zAmp;
       buf = gfx.createImageData(W, H);
       data32 = new Uint32Array(buf.data.buffer);
-      raf = requestAnimationFrame(frame);
+      if (reduced) paintStatic();
+      else raf = requestAnimationFrame(frame);
     };
 
     img.src = PORTRAIT_SRC;
