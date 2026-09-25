@@ -670,6 +670,7 @@ export function JarvisApp() {
 
   return (
     <main className="shell">
+      <ParticleHologram mode={hologramMode(view)} energy={hologramEnergy(view)} />
       <aside className="brand-panel">
         <p className="eyebrow">Mulk Allah</p>
         <h1>Jarvis</h1>
@@ -688,7 +689,6 @@ export function JarvisApp() {
         </ul>
       </aside>
       <div className="stage-wrap">
-        <ParticleHologram mode={hologramMode(view)} energy={hologramEnergy(view)} />
         <div className="hud">
         <div className="bottom-panel">
           <section
