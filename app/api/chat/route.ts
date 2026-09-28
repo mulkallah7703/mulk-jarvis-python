@@ -4,7 +4,7 @@ import { streamText, type ModelMessage } from "ai";
 import { EMPTY_ANSWER, speakableError } from "@/lib/text";
 import {
   MISSING_KEY,
-  SYSTEM_PROMPT,
+  systemPrompt,
   geminiApiKey,
   geminiModel,
   logJarvisError,
@@ -68,7 +68,7 @@ export async function POST(req: Request) {
           try {
             const result = streamText({
               model: google(modelName),
-              system: SYSTEM_PROMPT,
+              system: systemPrompt(),
               messages: modelMessages,
               maxOutputTokens: 400,
               maxRetries: 0,
