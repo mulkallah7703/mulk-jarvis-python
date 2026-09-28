@@ -12,23 +12,42 @@ function browserFallback(): Response {
   return Response.json({ fallback: "browser" }, { headers: { "Cache-Control": "no-store", "X-TTS": "browser" } });
 }
 
-function audioResponse(bytes: Uint8Array, contentType: string): Response {
+const DEFAULT_ELEVEN_VOICE = "rPNcQ53R703tTmtue1AT";
+const DEFAULT_ELEVEN_MODEL = "eleven_flash_v2_5";
+
+function audioResponse(bytes: Uint8Array, contentType: string, provider = "server"): Response {
   const copy = new Uint8Array(bytes.byteLength);
   copy.set(bytes);
   return new Response(copy, {
     headers: {
       "Content-Type": contentType,
       "Cache-Control": "no-store",
-      "X-TTS": "server",
+      "X-TTS": provider,
     },
   });
 }
 
+function elevenLabsKey(): string {
+  return (process.env.ELEVENLABS_API_KEY || "").trim();
+}
+
+function elevenLabsVoiceId(): string {
+  return (process.env.ELEVENLABS_VOICE_ID || DEFAULT_ELEVEN_VOICE).trim() || DEFAULT_ELEVEN_VOICE;
+}
+
+function elevenLabsModel(): string {
+  const configured = process.env.ELEVENLABS_MODEL || process.env.ELEVENLABS_MODEL_ID || DEFAULT_ELEVEN_MODEL;
+  return configured.trim() || DEFAULT_ELEVEN_MODEL;
+}
+
 async function elevenLabs(text: string, signal: AbortSignal): Promise<Response> {
-  const voiceId = (process.env.ELEVENLABS_VOICE_ID || "").trim();
-  const apiKey = (process.env.ELEVENLABS_API_KEY || "").trim();
-  const model = (process.env.ELEVENLABS_MODEL_ID || "eleven_flash_v2_5").trim() || "eleven_flash_v2_5";
-  const response = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`, {
+  const apiKey = elevenLabsKey();
+  if (!apiKey) throw new Error("ElevenLabs key missing");
+  const voiceId = elevenLabsVoiceId();
+  const model = elevenLabsModel();
+  const url = new URL(`https://api.elevenlabs.io/v1/text-to-speech/${encodeURIComponent(voiceId)}/stream`);
+  url.searchParams.set("optimize_streaming_latency", "3");
+  const response = await fetch(url, {
     method: "POST",
     headers: {
       "xi-api-key": apiKey,
@@ -38,8 +57,15 @@ async function elevenLabs(text: string, signal: AbortSignal): Promise<Response> 
     body: JSON.stringify({ text, model_id: model }),
     signal,
   });
-  if (!response.ok) throw new Error(`ElevenLabs ${response.status}`);
-  return audioResponse(new Uint8Array(await response.arrayBuffer()), "audio/mpeg");
+  if (!response.ok || !response.body) throw new Error(`ElevenLabs ${response.status}`);
+  const contentType = (response.headers.get("content-type") || "audio/mpeg").split(";")[0].trim();
+  return new Response(response.body, {
+    headers: {
+      "Content-Type": contentType.startsWith("audio/") ? contentType : "audio/mpeg",
+      "Cache-Control": "no-store",
+      "X-TTS": "elevenlabs",
+    },
+  });
 }
 
 async function geminiSpeech(text: string, signal: AbortSignal): Promise<Response> {
@@ -59,8 +85,6 @@ async function geminiSpeech(text: string, signal: AbortSignal): Promise<Response
 }
 
 export async function POST(req: Request) {
-  if (resolveWebTts() === "browser") return browserFallback();
-
   let text = "";
   try {
     const body = (await req.json()) as { text?: unknown };
@@ -70,10 +94,21 @@ export async function POST(req: Request) {
   }
   if (!text) return browserFallback();
 
+  if (elevenLabsKey()) {
+    const elevenSignal = AbortSignal.any([req.signal, AbortSignal.timeout(12_000)]);
+    try {
+      return await elevenLabs(text, elevenSignal);
+    } catch (error) {
+      if (req.signal.aborted) return browserFallback();
+      logJarvisError("tts", error);
+    }
+  }
+
+  if (resolveWebTts() === "browser") return browserFallback();
+
   const signal = AbortSignal.any([req.signal, AbortSignal.timeout(20_000)]);
   const provider = resolveWebTts();
   try {
-    if (provider === "elevenlabs") return await elevenLabs(text, signal);
     if (provider === "gemini") return await geminiSpeech(text, signal);
   } catch (error) {
     if (!req.signal.aborted) logJarvisError("tts", error);

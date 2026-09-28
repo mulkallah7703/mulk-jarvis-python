@@ -311,10 +311,11 @@ async function speakServer(engine: Engine, text: string, generation: number): Pr
       signal: abort.signal,
     });
     if (engine.generation !== generation) return true;
-    const type = response.headers.get("content-type") || "";
+    const type = (response.headers.get("content-type") || "").split(";")[0].trim();
     if (!response.ok || !type.startsWith("audio/")) return false;
-    const blob = await response.blob();
+    const downloaded = await response.blob();
     if (engine.generation !== generation) return true;
+    const blob = downloaded.type ? downloaded : new Blob([downloaded], { type });
     return playBlob(engine, blob, generation);
   } catch {
     return engine.generation !== generation || abort.signal.aborted;

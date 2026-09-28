@@ -97,12 +97,14 @@ Environment variables for the web app:
 | --- | --- | --- |
 | `GEMINI_API_KEY` or `GOOGLE_API_KEY` | yes, to answer | Same key as the CLI. Without it, the wake greeting still works. |
 | `GEMINI_MODEL` | no | Default `gemini-2.5-flash`. |
-| `TTS_PROVIDER` | no | `browser`, `gemini`, or `elevenlabs`. The CLI value `edge` cannot run here: a Gemini key uses Gemini TTS, otherwise the browser voice. |
+| `TTS_PROVIDER` | no | `browser`, `gemini`, or `elevenlabs`. The CLI value `edge` cannot run here. An ElevenLabs key is tried first; this chooses the fallback. |
 | `GEMINI_TTS_MODEL` | no | Default `gemini-2.5-flash-preview-tts`. |
 | `GEMINI_TTS_VOICE` | no | Default `Charon`. |
-| `ELEVENLABS_API_KEY`, `ELEVENLABS_VOICE_ID`, `ELEVENLABS_MODEL_ID` | only for ElevenLabs | Same names as the CLI. Set `TTS_PROVIDER=elevenlabs`. |
+| `ELEVENLABS_API_KEY` | no | When set, `/api/tts` speaks with ElevenLabs first for Arabic and English. | 
+| `ELEVENLABS_VOICE_ID` | no | Defaults to `rPNcQ53R703tTmtue1AT`. |
+| `ELEVENLABS_MODEL` | no | Defaults to `eleven_flash_v2_5`. `ELEVENLABS_MODEL_ID` is still accepted. |
 
-If Gemini TTS or ElevenLabs fails, the page speaks with the browser voice.
+If ElevenLabs is missing or returns an error, speech uses Gemini TTS when that key is set, then the browser voice.
 
 The public URL spends the Gemini quota of whoever holds the key. Do not share the deployment if the key is unrestricted.
 
