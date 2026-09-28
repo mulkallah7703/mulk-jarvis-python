@@ -76,9 +76,9 @@ export function parseMessages(body: unknown): ChatMessage[] | null {
 }
 
 export function logJarvisError(label: string, error: unknown): void {
-  const key = geminiApiKey();
+  const secrets = [geminiApiKey(), (process.env.ELEVENLABS_API_KEY || "").trim()].filter(Boolean);
   let message = error instanceof Error ? error.message : String(error);
-  if (key) message = message.split(key).join("[key]");
+  for (const secret of secrets) message = message.split(secret).join("[key]");
   console.error(`[jarvis] ${label}: ${message}`);
 }
 
