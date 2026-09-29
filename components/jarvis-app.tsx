@@ -17,6 +17,7 @@ import {
   sanitizeSpeech,
   type SpeechQueue,
 } from "@/lib/text";
+import { bindSpeechLevel } from "@/lib/speech-level";
 import { isStopPhrase, matchWake, normalize } from "@/lib/wake";
 
 type Mode = "wake" | "session";
@@ -285,10 +286,12 @@ function playBlob(engine: Engine, blob: Blob, generation: number): Promise<boole
     const url = URL.createObjectURL(blob);
     const audio = new Audio(url);
     engine.audio = audio;
+    const releaseLevel = bindSpeechLevel(audio);
     let settled = false;
     const finish = (ok: boolean) => {
       if (settled) return;
       settled = true;
+      releaseLevel();
       URL.revokeObjectURL(url);
       if (engine.audio === audio) engine.audio = null;
       resolve(ok);
