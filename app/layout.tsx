@@ -4,8 +4,8 @@ import type { ReactNode } from "react";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Mulk Jarvis",
-  description: "Voice assistant for Mulk Allah Alsadi. Say mulk.",
+  title: "Mulk KORA",
+  description: "KORA for Mulk Allah Alsadi. The AI That Has Attitude. Say mulk.",
 };
 
 export const viewport: Viewport = {

@@ -51,6 +51,8 @@ describe("stop phrases", () => {
   it("matches whole utterances only", () => {
     assert.equal(isStopPhrase("Stop Jarvis!"), true);
     assert.equal(isStopPhrase("please stop jarvis"), true);
+    assert.equal(isStopPhrase("stop kora"), true);
+    assert.equal(isStopPhrase("توقف كورا"), true);
     assert.equal(isStopPhrase("goodbye"), true);
     assert.equal(isStopPhrase("توقف"), true);
     assert.equal(isStopPhrase("توقف؟"), true);
