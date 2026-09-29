@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef } from "react";
+import { sampleSpeechLevel, waveMotion } from "@/lib/speech-level";
 import type { OrbState } from "./orb-state";
 
 const DOT = 2;
@@ -23,6 +24,8 @@ type Particles = {
   g: Uint8Array;
   b: Uint8Array;
   ph: Float32Array;
+  kind: Uint8Array;
+  sz: Uint8Array;
 };
 
 type Props = {
@@ -57,6 +60,8 @@ export default function ParticleHologram({ mode = "idle", energy = 0 }: Props) {
     let imgW = 0;
     let imgH = 0;
     let builtKey = "";
+    let flowAmp = 0.8;
+    let flowSpeed = 0.00025;
     const mouse = { x: -9999, y: -9999 };
     const reduced =
       typeof window !== "undefined" &&
@@ -81,14 +86,16 @@ export default function ParticleHologram({ mode = "idle", energy = 0 }: Props) {
       r: number,
       g: number,
       b: number,
+      size: number,
     ) {
       if (!data32) return;
       const xi = x | 0;
       const yi = y | 0;
-      for (let dy = 0; dy < DOT; dy++) {
+      const dot = size > 1 ? size : 1;
+      for (let dy = 0; dy < dot; dy++) {
         const yy = yi + dy;
         if (yy < 0 || yy >= H) continue;
-        for (let dx = 0; dx < DOT; dx++) {
+        for (let dx = 0; dx < dot; dx++) {
           const xx = xi + dx;
           if (xx < 0 || xx >= W) continue;
           data32[yy * W + xx] = (255 << 24) | (b << 16) | (g << 8) | r;
@@ -113,6 +120,9 @@ export default function ParticleHologram({ mode = "idle", energy = 0 }: Props) {
       const R2 = MOUSE_R * MOUSE_R;
       const jitter = JITTER * jitterMul;
       const shimmer = SHIMMER * shimmerMul;
+      const motion = waveMotion(st, sampleSpeechLevel());
+      flowAmp += (motion.amp - flowAmp) * 0.08;
+      flowSpeed += (motion.speed - flowSpeed) * 0.08;
 
       for (let i = 0; i < N; i++) {
         const dx = p.x[i] - mouse.x;
@@ -132,8 +142,13 @@ export default function ParticleHologram({ mode = "idle", energy = 0 }: Props) {
         p.y[i] += p.vy[i];
 
         const ph = p.ph[i] + t * 0.003;
-        const jx = Math.sin(ph) * jitter;
-        const jy = Math.cos(ph * 1.3) * jitter;
+        let jx = Math.sin(ph) * jitter;
+        let jy = Math.cos(ph * 1.3) * jitter;
+        if (p.kind[i] === 1) {
+          const along = p.hx[i] * 0.012 + t * flowSpeed + p.ph[i];
+          jx += Math.sin(along) * flowAmp;
+          jy += Math.cos(along * 0.7) * flowAmp * 0.42;
+        }
         let a = 1.25 - shimmer * 0.5 + Math.sin(ph * 2.1) * shimmer * 0.5;
         const rel = p.hy[i] / H - scan;
         if (rel > -0.05 && rel < 0.05) a += 0.6 * (1 - Math.abs(rel) / 0.05);
@@ -146,6 +161,7 @@ export default function ParticleHologram({ mode = "idle", energy = 0 }: Props) {
           Math.min(255, p.r[i] * a) | 0,
           Math.min(255, p.g[i] * a) | 0,
           Math.min(255, p.b[i] * a) | 0,
+          p.sz[i] || DOT,
         );
       }
       gfx.putImageData(buf, 0, 0);
@@ -157,7 +173,7 @@ export default function ParticleHologram({ mode = "idle", energy = 0 }: Props) {
       data32.fill(0xff000000);
       const p = particles;
       for (let i = 0; i < N; i++) {
-        plot(p.hx[i], p.hy[i], p.r[i], p.g[i], p.b[i]);
+        plot(p.hx[i], p.hy[i], p.r[i], p.g[i], p.b[i], p.sz[i] || DOT);
       }
       gfx.putImageData(buf, 0, 0);
     }
@@ -216,22 +232,84 @@ export default function ParticleHologram({ mode = "idle", energy = 0 }: Props) {
       const pg: number[] = [];
       const pb: number[] = [];
       const ph: number[] = [];
+      const pk: number[] = [];
+      const psz: number[] = [];
+      const edgeSeeds: { x: number; y: number; r: number; g: number; b: number; sz: number }[] = [];
       const cap = wide ? 48000 : 24000;
       const seen = new Uint8Array(imgW * imgH);
-      const pushWorld = (x: number, y: number, r: number, g: number, b: number) => {
-        if (px.length >= cap || y < 0 || x < 0 || y >= bh || x >= bw) return;
+      const mask = new Uint8Array(imgW * imgH);
+      for (let y = 0; y < imgH; y += 1) {
+        for (let x = 0; x < imgW; x += 1) {
+          const i = (y * imgW + x) * 4;
+          const r = src[i] ?? 0;
+          const g = src[i + 1] ?? 0;
+          const b = src[i + 2] ?? 0;
+          if ((b > 95 && 0.2126 * r + 0.7152 * g + 0.0722 * b > 48)) mask[y * imgW + x] = 1;
+        }
+      }
+      const stride = imgW + 1;
+      const pref = new Int32Array(stride * (imgH + 1));
+      for (let y = 1; y <= imgH; y += 1) {
+        let row = 0;
+        const srcRow = (y - 1) * imgW;
+        const prev = (y - 1) * stride;
+        const cur = y * stride;
+        for (let x = 1; x <= imgW; x += 1) {
+          row += mask[srcRow + x - 1] ?? 0;
+          pref[cur + x] = (pref[prev + x] ?? 0) + row;
+        }
+      }
+      const density = (x: number, y: number, rad: number) => {
+        const x0 = Math.max(0, x - rad);
+        const y0 = Math.max(0, y - rad);
+        const x1 = Math.min(imgW, x + rad + 1);
+        const y1 = Math.min(imgH, y + rad + 1);
+        const sum =
+          (pref[y1 * stride + x1] ?? 0) -
+          (pref[y0 * stride + x1] ?? 0) -
+          (pref[y1 * stride + x0] ?? 0) +
+          (pref[y0 * stride + x0] ?? 0);
+        return sum / ((x1 - x0) * (y1 - y0));
+      };
+      const pushWorld = (
+        x: number,
+        y: number,
+        r: number,
+        g: number,
+        b: number,
+        kind: number,
+        sz: number,
+      ) => {
+        if (px.length >= cap || y < 2 || x < 0 || y >= bh - 2 || x >= bw) return;
         px.push(x);
         py.push(y);
         pr.push(r);
         pg.push(g);
         pb.push(b);
         ph.push(Math.random() * Math.PI * 2);
+        pk.push(kind);
+        psz.push(sz);
       };
       const push = (x: number, y: number, r: number, g: number, b: number) => {
         const slot = y * imgW + x;
         if (seen[slot]) return;
         seen[slot] = 1;
-        pushWorld(ox + x * scale, oy + y * scale, r, g, b);
+        const ny = y / imgH;
+        const lum = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+        const gold = r > 140 && g > 70 && b < 170 && r > b + 20;
+        const loose = ny > 0.6 && ny < 0.985 && !gold && lum > 42 && density(x, y, 7) < 0.3;
+        if (loose) {
+          const sz = lum > 150 ? 2 : 1;
+          const wx = ox + x * scale;
+          const wy = oy + y * scale;
+          const rel = (wx - ox) / side;
+          if ((rel < 0.4 || rel > 0.6) && edgeSeeds.length < 5000) {
+            edgeSeeds.push({ x: wx, y: wy, r, g, b, sz });
+          }
+          pushWorld(wx, wy, r, g, b, 1, sz);
+          return;
+        }
+        pushWorld(ox + x * scale, oy + y * scale, r, g, b, 0, DOT);
       };
       const lumOf = (r: number, g: number, b: number) => 0.2126 * r + 0.7152 * g + 0.0722 * b;
       const isGold = (r: number, g: number, b: number) => r > 140 && g > 70 && b < 170 && r > b + 20;
@@ -246,6 +324,8 @@ export default function ParticleHologram({ mode = "idle", energy = 0 }: Props) {
           hot ? 170 + Math.random() * 70 : 30 + Math.random() * 35,
           hot ? 200 + Math.random() * 40 : 80 + Math.random() * 50,
           200 + Math.random() * 55,
+          0,
+          hot ? 2 : 1,
         );
       }
 
@@ -297,24 +377,38 @@ export default function ParticleHologram({ mode = "idle", energy = 0 }: Props) {
         }
       }
 
-      if (wide) {
-        const spacing = Math.max(4, bodyStep + 1);
-        const y0 = oy + side * 0.7;
-        const y1 = oy + side * 0.97;
-        for (let x = 0; x < bw; x += spacing) {
-          const rel = (x - ox) / side;
-          if (rel > 0.36 && rel < 0.64) continue;
-          const crest = 0.5 + 0.5 * Math.sin(x * 0.018);
-          const ridge = 0.28 + crest * 0.42;
-          for (let y = y0; y < y1; y += spacing) {
-            const ny = (y - y0) / (y1 - y0);
-            const band = Math.exp(-((ny - ridge) * (ny - ridge)) / 0.018);
-            if (band < 0.22 && Math.random() > 0.12) continue;
-            const glow = 0.28 + band * 0.72;
-            pushWorld(x, y, 18 + glow * 90, 90 + glow * 120, 170 + glow * 80);
+      const extendStrip = (dir: number) => {
+        const strip = edgeSeeds.filter((seed) => (dir < 0 ? seed.x < ox + side * 0.4 : seed.x > ox + side * 0.6));
+        if (strip.length < 8) return;
+        let minX = strip[0]?.x ?? 0;
+        let maxX = minX;
+        for (const seed of strip) {
+          if (seed.x < minX) minX = seed.x;
+          if (seed.x > maxX) maxX = seed.x;
+        }
+        const reach = dir < 0 ? Math.max(1, minX) : Math.max(1, bw - maxX);
+        for (const seed of strip) {
+          for (let copy = 0; copy < 3; copy += 1) {
+            const near = Math.pow(Math.random(), 0.65);
+            if (Math.random() > 0.5 + 0.5 * near) continue;
+            const nx = (dir < 0 ? minX - (1 - near) * reach : maxX + (1 - near) * reach) + (Math.random() - 0.5) * 20;
+            const ny = seed.y + (Math.random() - 0.5) * 18;
+            const spark = 0.78 + Math.random() * 0.4;
+            const dim = (0.7 + 0.3 * near) * spark;
+            pushWorld(
+              nx,
+              ny,
+              Math.min(255, seed.r * dim),
+              Math.min(255, seed.g * dim),
+              Math.min(255, seed.b * dim),
+              1,
+              Math.random() > 0.86 ? Math.min(3, seed.sz + 1) : seed.sz,
+            );
           }
         }
-      }
+      };
+      if (ox > 8) extendStrip(-1);
+      if (bw - (ox + side) > 8) extendStrip(1);
 
       N = px.length;
       particles = {
@@ -328,6 +422,8 @@ export default function ParticleHologram({ mode = "idle", energy = 0 }: Props) {
         g: Uint8Array.from(pg),
         b: Uint8Array.from(pb),
         ph: Float32Array.from(ph),
+        kind: Uint8Array.from(pk),
+        sz: Uint8Array.from(psz),
       };
       buf = gfx.createImageData(W, H);
       data32 = new Uint32Array(buf.data.buffer);
