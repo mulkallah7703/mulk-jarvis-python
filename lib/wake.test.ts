@@ -6,19 +6,16 @@ import { isStopPhrase, matchWake } from "./wake.ts";
 
 describe("wake word", () => {
   it("keeps the command spoken with the wake word", () => {
-    const hit = matchWake("Hey Mulk, what time is it?");
+    const hit = matchWake("kora what time is it");
     assert.ok(hit);
-    assert.equal(hit.remainder, "what time is it?");
+    assert.equal(hit.remainder, "what time is it");
+    const hey = matchWake("Hey Kora, what time is it?");
+    assert.ok(hey);
+    assert.equal(hey.remainder, "what time is it?");
   });
 
-  it("treats the full name as only a wake", () => {
-    const hit = matchWake("Mulk Allah Alsadi");
-    assert.ok(hit);
-    assert.equal(hit.remainder, "");
-  });
-
-  it("matches Arabic wake phrases", () => {
-    for (const phrase of ["ملك", "مُلْك", "ملك الله", "مولك"]) {
+  it("matches transcription variants", () => {
+    for (const phrase of ["hey cora", "hi kora", "korra", "corra", "qora", "kura", "كورا", "قورا", "كُورا", "يا كورا", "هاي كورا"]) {
       const hit = matchWake(phrase);
       assert.ok(hit, phrase);
       assert.equal(hit.remainder, "", phrase);
@@ -26,24 +23,23 @@ describe("wake word", () => {
   });
 
   it("keeps an Arabic command after the wake", () => {
-    const short = matchWake("ملك كم الساعة");
+    const short = matchWake("كورا وش الوقت");
     assert.ok(short);
-    assert.equal(short.remainder, "كم الساعة");
-    const named = matchWake("ملك الله، كم الساعة؟");
+    assert.equal(short.remainder, "وش الوقت");
+    const named = matchWake("يا كورا، وش الوقت؟");
     assert.ok(named);
-    assert.equal(named.remainder, "كم الساعة؟");
+    assert.equal(named.remainder, "وش الوقت؟");
   });
 
-  it("ignores lookalikes", () => {
-    assert.equal(matchWake("the milk is cold"), null);
-    assert.equal(matchWake("المملكة العربية"), null);
+  it("ignores the old wake word and lookalikes", () => {
+    assert.equal(matchWake("mulk"), null);
+    assert.equal(matchWake("ملك"), null);
+    assert.equal(matchWake("Mulk Allah"), null);
+    assert.equal(matchWake("core"), null);
+    assert.equal(matchWake("corner office"), null);
+    assert.equal(matchWake("chorus"), null);
+    assert.equal(matchWake("كورة"), null);
     assert.equal(matchWake("hello there"), null);
-  });
-
-  it("accepts the malk mishear", () => {
-    const hit = matchWake("malk tell me a joke");
-    assert.ok(hit);
-    assert.equal(hit.remainder, "tell me a joke");
   });
 });
 

@@ -5,7 +5,7 @@ import "./globals.css";
 
 export const metadata: Metadata = {
   title: "Mulk KORA",
-  description: "KORA for Mulk Allah Alsadi. The AI That Has Attitude. Say mulk.",
+  description: "KORA for Mulk Allah Alsadi. The AI That Has Attitude. Say Kora.",
 };
 
 export const viewport: Viewport = {

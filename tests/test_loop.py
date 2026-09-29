@@ -77,13 +77,14 @@ class LoopTests(unittest.TestCase):
     def test_wake_session_and_stop(self) -> None:
         speaker, chat = self._run(
             [
+                "stop kora",
                 "just noise",
-                "mulk",
+                "kora",
                 "how are you",
-                "mulk",
+                "kora",
                 "stop jarvis",
                 "what time is it",
-                "mulk what is two plus two",
+                "kora what is two plus two",
             ]
         )
         self.assertEqual(
@@ -102,14 +103,14 @@ class LoopTests(unittest.TestCase):
 
     def test_ctrl_c_returns_to_wake_without_goodbye(self) -> None:
         speaker, chat = self._run(
-            ["mulk", "how are you", "__BREAK__", "what time is it"]
+            ["kora", "how are you", "__BREAK__", "what time is it"]
         )
         self.assertEqual(speaker.lines, [GREETING, "echo how are you"])
         self.assertEqual(chat.queries, ["how are you"])
         self.assertEqual(chat.reset_count, 1)
 
     def test_arabic_session(self) -> None:
-        speaker, chat = self._run(["ملك", "كم الساعة", "توقف"])
+        speaker, chat = self._run(["كورا", "كم الساعة", "توقف"])
         self.assertEqual(
             speaker.lines,
             [GREETING, "echo كم الساعة", "حاضر."],
