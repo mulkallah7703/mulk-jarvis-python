@@ -6,9 +6,12 @@ import {
   MISSING_KEY,
   systemPrompt,
   geminiApiKey,
-  geminiModel,
+  geminiModelChain,
+  isGeminiAuthError,
+  logChatModelFailure,
   logJarvisError,
   parseMessages,
+  shouldFallbackModel,
   thinkingConfig,
 } from "@/lib/server/settings";
 
@@ -39,14 +42,11 @@ export async function POST(req: Request) {
   const apiKey = geminiApiKey();
   if (!apiKey) return plain(MISSING_KEY);
 
-  const modelName = geminiModel();
   const google = createGoogle({ apiKey });
   const modelMessages: ModelMessage[] = messages.map((message) => ({
     role: message.role,
     content: message.content,
   }));
-  const thinking = thinkingConfig(modelName);
-  const variants = thinking ? [thinking, undefined] : [undefined];
   const encoder = new TextEncoder();
 
   const stream = new ReadableStream<Uint8Array>({
@@ -62,46 +62,57 @@ export async function POST(req: Request) {
       };
       let yielded = false;
       let lastError: unknown;
+      let stop = false;
       try {
-        for (const variant of variants) {
-          if (yielded || req.signal.aborted) break;
-          try {
-            const result = streamText({
-              model: google(modelName),
-              system: systemPrompt(),
-              messages: modelMessages,
-              maxOutputTokens: 400,
-              maxRetries: 0,
-              abortSignal: req.signal,
-              ...(modelName.toLowerCase().includes("gemini-3") ? {} : { temperature: 0.4 }),
-              ...(variant ? { providerOptions: { google: { thinkingConfig: variant } } } : {}),
-            });
-            for await (const part of result.fullStream) {
-              if (part.type === "text-delta") {
-                if (!part.text) continue;
-                yielded = true;
-                send(part.text);
-              } else if (part.type === "error") {
-                const failure = part.error instanceof Error ? part.error : new Error("Gemini request failed");
-                throw failure;
-              } else if (part.type === "abort") {
+        for (const modelName of geminiModelChain()) {
+          if (yielded || req.signal.aborted || stop) break;
+          const thinking = thinkingConfig(modelName);
+          const variants = thinking ? [thinking, undefined] : [undefined];
+          let advance = false;
+          for (const variant of variants) {
+            if (yielded || req.signal.aborted || stop) break;
+            try {
+              const result = streamText({
+                model: google(modelName),
+                system: systemPrompt(),
+                messages: modelMessages,
+                maxOutputTokens: 400,
+                maxRetries: 0,
+                abortSignal: req.signal,
+                ...(modelName.toLowerCase().includes("gemini-3") ? {} : { temperature: 0.4 }),
+                ...(variant ? { providerOptions: { google: { thinkingConfig: variant } } } : {}),
+              });
+              for await (const part of result.fullStream) {
+                if (part.type === "text-delta") {
+                  if (!part.text) continue;
+                  yielded = true;
+                  send(part.text);
+                } else if (part.type === "error") {
+                  const failure = part.error instanceof Error ? part.error : new Error("Gemini request failed");
+                  throw failure;
+                } else if (part.type === "abort") {
+                  break;
+                }
+              }
+              if (yielded) break;
+            } catch (error) {
+              lastError = error;
+              if (yielded || req.signal.aborted) break;
+              logChatModelFailure(modelName, error);
+              if (isGeminiAuthError(error)) {
+                stop = true;
+                break;
+              }
+              if (shouldFallbackModel(error)) {
+                advance = true;
                 break;
               }
             }
-            if (yielded) break;
-          } catch (error) {
-            lastError = error;
-            if (yielded || req.signal.aborted) break;
-            const message = (error instanceof Error ? error.message : String(error)).toLowerCase();
-            if (["api key", "api_key", "permission", "unauthenticated", "401", "403"].some((word) => message.includes(word))) {
-              break;
-            }
           }
+          if (!advance) break;
         }
         if (!yielded && !req.signal.aborted) {
-          const message = lastError ? speakableError(lastError) : EMPTY_ANSWER;
-          if (lastError) logJarvisError("chat", lastError);
-          send(message);
+          send(lastError ? speakableError(lastError) : EMPTY_ANSWER);
         }
       } catch (error) {
         if (!req.signal.aborted && !yielded) {

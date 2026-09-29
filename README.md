@@ -96,7 +96,8 @@ Environment variables for the web app:
 | Variable | Required | Role |
 | --- | --- | --- |
 | `GEMINI_API_KEY` or `GOOGLE_API_KEY` | yes, to answer | Same key as the CLI. Without it, the wake greeting still works. |
-| `GEMINI_MODEL` | no | Default `gemini-2.5-flash`. |
+| `GEMINI_MODEL` | no | Default `gemini-2.5-flash`. Production uses `gemini-3.6-flash`. |
+| `GEMINI_FALLBACK_MODELS` | no | Comma-separated flash models tried after `GEMINI_MODEL` when that model returns quota (429), 404, or 5xx. Default `gemini-3.1-flash-lite,gemini-3.5-flash-lite`. Blank disables the fallback. |
 | `TTS_PROVIDER` | no | `browser`, `gemini`, or `elevenlabs`. The CLI value `edge` cannot run here. An ElevenLabs key is tried first; this chooses the fallback. |
 | `GEMINI_TTS_MODEL` | no | Default `gemini-2.5-flash-preview-tts`. |
 | `GEMINI_TTS_VOICE` | no | Default `Charon`. |
