@@ -1,6 +1,13 @@
-import type { GoogleLanguageModelOptions } from "@ai-sdk/google";
-
 import { MISSING_KEY } from "../text";
+import { geminiModelChain as modelChain, logChatModelFailure as logModelFailure } from "../gemini-models";
+
+export {
+  DEFAULT_GEMINI_FALLBACK_MODELS,
+  geminiErrorStatus,
+  isGeminiAuthError,
+  shouldFallbackModel,
+  thinkingConfig,
+} from "../gemini-models";
 
 export const SYSTEM_PROMPT = `You are Jarvis for Mulk Allah Alsadi: an insanely capable voice AI with attitude. Arabic: مساعدك الذكي، بس عنده شخصية. Sharp, fast, confident, dry, sarcastic, playfully arrogant, witty, loyal. Never corporate, generic, motivational, or an encyclopedia.
 
@@ -52,6 +59,10 @@ export function geminiModel(): string {
   return (process.env.GEMINI_MODEL || "gemini-2.5-flash").trim() || "gemini-2.5-flash";
 }
 
+export function geminiModelChain(): string[] {
+  return modelChain(geminiModel(), process.env.GEMINI_FALLBACK_MODELS);
+}
+
 export function geminiTtsModel(): string {
   return (process.env.GEMINI_TTS_MODEL || "gemini-2.5-flash-preview-tts").trim() || "gemini-2.5-flash-preview-tts";
 }
@@ -73,11 +84,9 @@ export function resolveWebTts(): WebTts {
   return "browser";
 }
 
-export function thinkingConfig(model: string): GoogleLanguageModelOptions["thinkingConfig"] | undefined {
-  const name = model.toLowerCase();
-  if (name.includes("gemini-3")) return { thinkingLevel: "low" };
-  if (name.includes("2.5") || name.includes("flash-lite")) return { thinkingBudget: 0 };
-  return undefined;
+export function logChatModelFailure(model: string, error: unknown): void {
+  const secrets = [geminiApiKey(), (process.env.ELEVENLABS_API_KEY || "").trim()].filter(Boolean);
+  logModelFailure(model, error, secrets);
 }
 
 export function parseMessages(body: unknown): ChatMessage[] | null {
