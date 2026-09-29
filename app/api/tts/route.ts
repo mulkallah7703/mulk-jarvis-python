@@ -12,7 +12,8 @@ function browserFallback(): Response {
   return Response.json({ fallback: "browser" }, { headers: { "Cache-Control": "no-store", "X-TTS": "browser" } });
 }
 
-const DEFAULT_ELEVEN_VOICE = "rPNcQ53R703tTmtue1AT";
+const DEFAULT_ELEVEN_VOICE = "ER6QMHaBjLyek2P4dKLO";
+const FALLBACK_ELEVEN_VOICE = "rPNcQ53R703tTmtue1AT";
 const DEFAULT_ELEVEN_MODEL = "eleven_flash_v2_5";
 
 function audioResponse(bytes: Uint8Array, contentType: string, provider = "server"): Response {
@@ -44,10 +45,15 @@ function supportsLanguageCode(model: string): boolean {
   return /(?:^|_)(?:flash|turbo)_v2_5$/.test(model) || model.includes("v2_5") || model.includes("v2.5");
 }
 
-async function elevenLabs(text: string, lang: "ar" | "en", previous: string, signal: AbortSignal): Promise<Response> {
+async function elevenLabsOnce(
+  voiceId: string,
+  text: string,
+  lang: "ar" | "en",
+  previous: string,
+  signal: AbortSignal,
+): Promise<Response> {
   const apiKey = elevenLabsKey();
   if (!apiKey) throw new Error("ElevenLabs key missing");
-  const voiceId = elevenLabsVoiceId();
   const model = elevenLabsModel();
   const url = new URL(`https://api.elevenlabs.io/v1/text-to-speech/${encodeURIComponent(voiceId)}/stream`);
   url.searchParams.set("optimize_streaming_latency", "3");
@@ -84,7 +90,7 @@ async function elevenLabs(text: string, lang: "ar" | "en", previous: string, sig
   }
   if (!response.ok || !response.body) {
     signal.removeEventListener("abort", onAbort);
-    throw new Error(`ElevenLabs ${response.status}`);
+    throw new Error(`ElevenLabs ${response.status} voice=${voiceId}`);
   }
   const contentType = (response.headers.get("content-type") || "audio/mpeg").split(";")[0].trim();
   return new Response(response.body, {
@@ -93,8 +99,26 @@ async function elevenLabs(text: string, lang: "ar" | "en", previous: string, sig
       "Cache-Control": "no-store",
       "X-TTS": "elevenlabs",
       "X-TTS-Lang": lang,
+      "X-TTS-Voice": voiceId,
     },
   });
+}
+
+async function elevenLabs(text: string, lang: "ar" | "en", previous: string, signal: AbortSignal): Promise<Response> {
+  const primary = elevenLabsVoiceId();
+  const voices = primary === FALLBACK_ELEVEN_VOICE ? [primary] : [primary, FALLBACK_ELEVEN_VOICE];
+  let lastError: unknown;
+  for (let index = 0; index < voices.length; index += 1) {
+    const voiceId = voices[index] ?? primary;
+    try {
+      return await elevenLabsOnce(voiceId, text, lang, previous, signal);
+    } catch (error) {
+      lastError = error;
+      const missingVoice = error instanceof Error && /ElevenLabs 404 /.test(error.message);
+      if (!missingVoice || index === voices.length - 1) throw error;
+    }
+  }
+  throw lastError;
 }
 
 async function geminiSpeech(text: string, signal: AbortSignal): Promise<Response> {

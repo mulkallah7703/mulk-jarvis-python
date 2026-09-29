@@ -102,7 +102,7 @@ Environment variables for the web app:
 | `GEMINI_TTS_MODEL` | no | Default `gemini-2.5-flash-preview-tts`. |
 | `GEMINI_TTS_VOICE` | no | Default `Charon`. |
 | `ELEVENLABS_API_KEY` | no | When set, `/api/tts` speaks with ElevenLabs first for Arabic and English. | 
-| `ELEVENLABS_VOICE_ID` | no | Defaults to `rPNcQ53R703tTmtue1AT`. |
+| `ELEVENLABS_VOICE_ID` | no | Defaults to `ER6QMHaBjLyek2P4dKLO`. A missing voice falls back to `rPNcQ53R703tTmtue1AT`. |
 | `ELEVENLABS_MODEL` | no | Defaults to `eleven_flash_v2_5`. `ELEVENLABS_MODEL_ID` is still accepted. |
 
 If ElevenLabs is missing or returns an error, speech uses Gemini TTS when that key is set, then the browser voice.
