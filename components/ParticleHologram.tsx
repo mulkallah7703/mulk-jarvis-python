@@ -3,8 +3,6 @@
 import { useEffect, useRef } from "react";
 import type { OrbState } from "./orb-state";
 
-const STEP = 3;
-const MIN_BRIGHT = 18;
 const DOT = 2;
 const JITTER = 0.9;
 const SHIMMER = 0.35;
@@ -12,7 +10,7 @@ const SCAN_SPEED = 0.00045;
 const MOUSE_R = 70;
 const MOUSE_F = 5;
 const RETURN = 0.08;
-const PORTRAIT_SRC = "/jarvis-portrait.png";
+const PORTRAIT_SRC = "/kora-portrait.webp";
 
 type Particles = {
   hx: Float32Array;
@@ -55,6 +53,10 @@ export default function ParticleHologram({ mode = "idle", energy = 0 }: Props) {
     let particles: Particles | null = null;
     let raf = 0;
     let alive = true;
+    let src: Uint8ClampedArray | null = null;
+    let imgW = 0;
+    let imgH = 0;
+    let builtKey = "";
     const mouse = { x: -9999, y: -9999 };
     const reduced =
       typeof window !== "undefined" &&
@@ -163,42 +165,117 @@ export default function ParticleHologram({ mode = "idle", energy = 0 }: Props) {
       gfx.putImageData(buf, 0, 0);
     }
 
-    img.onload = () => {
-      if (!alive) return;
-      W = img.naturalWidth;
-      H = img.naturalHeight;
-      canvas.width = W;
-      canvas.height = H;
+    const quality = () => {
+      const cssW = Math.max(1, window.innerWidth);
+      const cssH = Math.max(1, window.innerHeight);
+      const dpr = Math.min(window.devicePixelRatio || 1, 1.75);
+      const area = cssW * cssH;
+      let side = Math.round(Math.min(cssW, cssH) * dpr);
+      let faceStep = 2;
+      let bodyStep = 3;
+      if (area < 480_000) {
+        side = Math.min(side, 700);
+        faceStep = 3;
+        bodyStep = 4;
+      } else if (area < 1_100_000) {
+        side = Math.min(side, 960);
+        faceStep = 2;
+        bodyStep = 3;
+      } else {
+        side = Math.min(side, 1120);
+        faceStep = 2;
+        bodyStep = 3;
+      }
+      if ((navigator.hardwareConcurrency || 4) <= 2) {
+        faceStep += 1;
+        bodyStep += 1;
+      }
+      return { side: Math.max(480, side), faceStep, bodyStep };
+    };
 
-      const off = document.createElement("canvas");
-      off.width = W;
-      off.height = H;
-      const octx = off.getContext("2d", { willReadFrequently: true });
-      if (!octx) return;
-      octx.drawImage(img, 0, 0);
-      const src = octx.getImageData(0, 0, W, H).data;
+    const build = () => {
+      if (!alive || !src || !imgW || !imgH) return;
+      const { side, faceStep, bodyStep } = quality();
+      const key = `${side}:${faceStep}:${bodyStep}`;
+      if (key === builtKey && particles) return;
+      builtKey = key;
+      cancelAnimationFrame(raf);
 
+      W = side;
+      H = side;
+      canvas.width = side;
+      canvas.height = side;
+      const scale = side / imgW;
       const px: number[] = [];
       const py: number[] = [];
       const pr: number[] = [];
       const pg: number[] = [];
       const pb: number[] = [];
       const ph: number[] = [];
-      for (let y = 0; y < H; y += STEP) {
-        for (let x = 0; x < W; x += STEP) {
-          const i = (y * W + x) * 4;
-          const r = src[i];
-          const g = src[i + 1];
-          const b = src[i + 2];
-          if (Math.max(r, g, b) < MIN_BRIGHT) continue;
-          px.push(x);
-          py.push(y);
-          pr.push(r);
-          pg.push(g);
-          pb.push(b);
-          ph.push(Math.random() * Math.PI * 2);
+      const seen = new Uint8Array(imgW * imgH);
+      const push = (x: number, y: number, r: number, g: number, b: number) => {
+        const slot = y * imgW + x;
+        if (seen[slot]) return;
+        seen[slot] = 1;
+        px.push(x * scale);
+        py.push(y * scale);
+        pr.push(r);
+        pg.push(g);
+        pb.push(b);
+        ph.push(Math.random() * Math.PI * 2);
+      };
+      const lumOf = (r: number, g: number, b: number) => 0.2126 * r + 0.7152 * g + 0.0722 * b;
+      const isGold = (r: number, g: number, b: number) => r > 140 && g > 70 && b < 170 && r > b + 20;
+      const isFigure = (r: number, g: number, b: number) => b > 95 && lumOf(r, g, b) > 48;
+
+      for (let y = 0; y < imgH; y += 1) {
+        const ny = y / imgH;
+        const faceRow = ny > 0.03 && ny < 0.47;
+        const bodyRow = ny >= 0.42 && ny < 0.98;
+        for (let x = 0; x < imgW; x += 1) {
+          const nx = x / imgW;
+          const face = faceRow && nx > 0.18 && nx < 0.82;
+          const step = face ? faceStep : bodyRow ? bodyStep : 8;
+          if (y % step !== 0 || x % step !== 0) continue;
+          const i = (y * imgW + x) * 4;
+          const r = src[i] ?? 0;
+          const g = src[i + 1] ?? 0;
+          const b = src[i + 2] ?? 0;
+          if (!isFigure(r, g, b) && !isGold(r, g, b)) continue;
+          push(x, y, r, g, b);
         }
       }
+      for (let y = 2; y < imgH - 2; y += 4) {
+        for (let x = 2; x < imgW - 2; x += 4) {
+          const i = (y * imgW + x) * 4;
+          const r = src[i] ?? 0;
+          const g = src[i + 1] ?? 0;
+          const b = src[i + 2] ?? 0;
+          const lum = lumOf(r, g, b);
+          if (lum < 42 || lum > 95 || isFigure(r, g, b)) continue;
+          const n =
+            lumOf(src[(y * imgW + x - 2) * 4] ?? 0, src[(y * imgW + x - 2) * 4 + 1] ?? 0, src[(y * imgW + x - 2) * 4 + 2] ?? 0) +
+            lumOf(src[(y * imgW + x + 2) * 4] ?? 0, src[(y * imgW + x + 2) * 4 + 1] ?? 0, src[(y * imgW + x + 2) * 4 + 2] ?? 0) +
+            lumOf(src[((y - 2) * imgW + x) * 4] ?? 0, src[((y - 2) * imgW + x) * 4 + 1] ?? 0, src[((y - 2) * imgW + x) * 4 + 2] ?? 0) +
+            lumOf(src[((y + 2) * imgW + x) * 4] ?? 0, src[((y + 2) * imgW + x) * 4 + 1] ?? 0, src[((y + 2) * imgW + x) * 4 + 2] ?? 0);
+          if (lum * 4 <= n + 60) continue;
+          push(x, y, r, g, b);
+        }
+      }
+      for (let y = 0; y < imgH; y += 1) {
+        if (y < imgH * 0.34 || y > imgH * 0.72) continue;
+        for (let x = 0; x < imgW; x += 1) {
+          const nx = x / imgW;
+          if (nx < 0.3 || nx > 0.72) continue;
+          const i = (y * imgW + x) * 4;
+          const r = src[i] ?? 0;
+          const g = src[i + 1] ?? 0;
+          const b = src[i + 2] ?? 0;
+          if (!isGold(r, g, b)) continue;
+          push(x, y, r, g, b);
+        }
+      }
+
       N = px.length;
       particles = {
         hx: Float32Array.from(px),
@@ -218,20 +295,46 @@ export default function ParticleHologram({ mode = "idle", energy = 0 }: Props) {
       else raf = requestAnimationFrame(frame);
     };
 
+    img.onload = () => {
+      if (!alive) return;
+      imgW = img.naturalWidth;
+      imgH = img.naturalHeight;
+      const off = document.createElement("canvas");
+      off.width = imgW;
+      off.height = imgH;
+      const octx = off.getContext("2d", { willReadFrequently: true });
+      if (!octx) return;
+      octx.drawImage(img, 0, 0);
+      src = octx.getImageData(0, 0, imgW, imgH).data;
+      build();
+    };
+
+    let resizeTimer = 0;
+    const onResize = () => {
+      window.clearTimeout(resizeTimer);
+      resizeTimer = window.setTimeout(() => {
+        if (alive) build();
+      }, 160);
+    };
+
     img.src = PORTRAIT_SRC;
     canvas.addEventListener("mousemove", onMove);
     canvas.addEventListener("mouseleave", onLeave);
+    window.addEventListener("resize", onResize);
 
     return () => {
       alive = false;
       cancelAnimationFrame(raf);
+      window.clearTimeout(resizeTimer);
       canvas.removeEventListener("mousemove", onMove);
       canvas.removeEventListener("mouseleave", onLeave);
+      window.removeEventListener("resize", onResize);
       img.onload = null;
       img.src = "";
       particles = null;
       buf = null;
       data32 = null;
+      src = null;
     };
   }, []);
 
