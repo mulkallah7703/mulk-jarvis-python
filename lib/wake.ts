@@ -35,6 +35,12 @@ const STOP_RAW = [
   "quit jarvis",
   "jarvis stop",
   "jarvis goodbye",
+  "stop kora",
+  "goodbye kora",
+  "exit kora",
+  "quit kora",
+  "kora stop",
+  "kora goodbye",
   "stop",
   "goodbye",
   "exit",
@@ -54,6 +60,12 @@ const STOP_RAW = [
   "وقف يا جارفس",
   "توقف يا جارفس",
   "يا جارفس توقف",
+  "توقف كورا",
+  "اوقف كورا",
+  "أوقف كورا",
+  "وقف يا كورا",
+  "توقف يا كورا",
+  "يا كورا توقف",
 ];
 
 const EDGE_CHARS = " ،,";

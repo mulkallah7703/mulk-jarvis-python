@@ -60,7 +60,7 @@ class VoiceJarvis:
     def _banner(self) -> None:
         tts_name = getattr(self.speaker, "tts", None)
         provider = getattr(tts_name, "name", self.settings.tts_provider)
-        print("Mulk Jarvis", flush=True)
+        print("Mulk KORA", flush=True)
         print(
             f"Whisper {self.settings.whisper_model} · "
             f"Gemini {self.settings.gemini_model} · TTS {provider}",
@@ -97,7 +97,7 @@ class VoiceJarvis:
         if wake.remainder and is_stop_phrase(wake.remainder):
             return
         self.in_session = True
-        print('Session on. Say "stop jarvis" or press Ctrl+C to wait.', flush=True)
+        print('Session on. Say "stop jarvis" or "stop kora", or press Ctrl+C to wait.', flush=True)
         self.speaker.say(GREETING)
         if self.control.quit.is_set():
             return

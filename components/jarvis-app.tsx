@@ -750,7 +750,8 @@ export function JarvisApp() {
       <ParticleHologram mode={hologramMode(view)} energy={hologramEnergy(view)} />
       <aside className="brand-panel">
         <p className="eyebrow">Mulk Allah</p>
-        <h1>Jarvis</h1>
+        <h1>KORA</h1>
+        <p className="eyebrow">The AI That Has Attitude.</p>
         <ul className="instructions">
           <li>Use Chrome or Edge and allow the mic.</li>
           <li>
@@ -758,8 +759,8 @@ export function JarvisApp() {
           </li>
           <li>Keep asking without the wake word.</li>
           <li>
-            Say <bdi dir="auto">stop jarvis</bdi>, <bdi dir="auto">goodbye</bdi>, or <bdi dir="auto">توقف</bdi>, or
-            press Mute or Stop, to end.
+            Say <bdi dir="auto">stop jarvis</bdi>, <bdi dir="auto">stop kora</bdi>, <bdi dir="auto">goodbye</bdi>,{" "}
+            <bdi dir="auto">توقف</bdi>, or <bdi dir="auto">توقف كورا</bdi>, or press Mute or Stop, to end.
           </li>
           <li>You can also type.</li>
           <li>Esc stops too.</li>
@@ -789,7 +790,7 @@ export function JarvisApp() {
           ) : (
             view.lines.map((line) => (
               <p key={line.id} className={`line line-${line.who}`}>
-                <span className="who">{line.who === "jarvis" ? "Jarvis" : line.who === "you" ? "You" : "Heard"}</span>
+                <span className="who">{line.who === "jarvis" ? "KORA" : line.who === "you" ? "You" : "Heard"}</span>
                 <span>{line.text}</span>
               </p>
             ))

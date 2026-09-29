@@ -52,6 +52,8 @@ class WakeTests(unittest.TestCase):
     def test_stop_phrases(self) -> None:
         self.assertTrue(is_stop_phrase("Stop Jarvis!"))
         self.assertTrue(is_stop_phrase("please stop jarvis"))
+        self.assertTrue(is_stop_phrase("stop kora"))
+        self.assertTrue(is_stop_phrase("توقف كورا"))
         self.assertTrue(is_stop_phrase("goodbye"))
         self.assertTrue(is_stop_phrase("توقف"))
         self.assertTrue(is_stop_phrase("توقف؟"))

@@ -18,7 +18,7 @@ from jarvis.tts import build_tts
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="jarvis",
-        description="Mulk Jarvis — local wake word, Whisper, Gemini, and speech.",
+        description="Mulk KORA — local wake word, Whisper, Gemini, and speech.",
     )
     parser.add_argument("--text", action="store_true", help="Type instead of using the microphone")
     parser.add_argument("--list-devices", action="store_true", help="Print audio input and output devices")
