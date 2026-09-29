@@ -116,7 +116,7 @@ export default function ParticleHologram({ mode = "idle", energy = 0 }: Props) {
       const scan = ((t * SCAN_SPEED * scanMul) % 1.6) - 0.3;
       const flicker = Math.random() < flickerChance ? 0.75 : 1.0;
       const R2 = MOUSE_R * MOUSE_R;
-      const jitter = JITTER * jitterMul;
+      const jitter = reduced ? 0 : JITTER * jitterMul;
       const shimmer = SHIMMER * shimmerMul;
       noteWaveLevel(st, t, sampleSpeechLevel());
 
@@ -161,16 +161,6 @@ export default function ParticleHologram({ mode = "idle", energy = 0 }: Props) {
       }
       gfx.putImageData(buf, 0, 0);
       raf = requestAnimationFrame(frame);
-    }
-
-    function paintStatic() {
-      if (!particles || !buf || !data32) return;
-      data32.fill(0xff000000);
-      const p = particles;
-      for (let i = 0; i < N; i++) {
-        plot(p.hx[i], p.hy[i], p.r[i], p.g[i], p.b[i], p.sz[i] || DOT);
-      }
-      gfx.putImageData(buf, 0, 0);
     }
 
     const quality = () => {
@@ -422,8 +412,7 @@ export default function ParticleHologram({ mode = "idle", energy = 0 }: Props) {
       };
       buf = gfx.createImageData(W, H);
       data32 = new Uint32Array(buf.data.buffer);
-      if (reduced) paintStatic();
-      else raf = requestAnimationFrame(frame);
+      raf = requestAnimationFrame(frame);
     };
 
     img.onload = () => {
