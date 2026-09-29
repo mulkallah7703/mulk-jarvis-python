@@ -10,44 +10,53 @@ from jarvis.whisper import clean_transcript
 
 class WakeTests(unittest.TestCase):
     def test_english_wake_and_command(self) -> None:
-        hit = match_wake("Hey Mulk, what time is it?")
+        hit = match_wake("kora what time is it")
+        self.assertIsNotNone(hit)
+        assert hit is not None
+        self.assertEqual(hit.remainder, "what time is it")
+        hit = match_wake("Hey Kora, what time is it?")
         self.assertIsNotNone(hit)
         assert hit is not None
         self.assertEqual(hit.remainder, "what time is it?")
 
-    def test_full_name_is_only_a_wake(self) -> None:
-        hit = match_wake("Mulk Allah Alsadi")
-        self.assertIsNotNone(hit)
-        assert hit is not None
-        self.assertEqual(hit.remainder, "")
-
-    def test_arabic_wake(self) -> None:
-        for phrase in ("ملك", "مُلْك", "ملك الله", "مولك"):
+    def test_transcription_variants(self) -> None:
+        for phrase in (
+            "hey cora",
+            "hi kora",
+            "korra",
+            "corra",
+            "qora",
+            "kura",
+            "كورا",
+            "قورا",
+            "كُورا",
+            "يا كورا",
+            "هاي كورا",
+        ):
             hit = match_wake(phrase)
             self.assertIsNotNone(hit, phrase)
             assert hit is not None
             self.assertEqual(hit.remainder, "", phrase)
 
     def test_arabic_command_after_wake(self) -> None:
-        hit = match_wake("ملك كم الساعة")
+        hit = match_wake("كورا وش الوقت")
         self.assertIsNotNone(hit)
         assert hit is not None
-        self.assertEqual(hit.remainder, "كم الساعة")
-        hit = match_wake("ملك الله، كم الساعة؟")
+        self.assertEqual(hit.remainder, "وش الوقت")
+        hit = match_wake("يا كورا، وش الوقت؟")
         self.assertIsNotNone(hit)
         assert hit is not None
-        self.assertEqual(hit.remainder, "كم الساعة؟")
+        self.assertEqual(hit.remainder, "وش الوقت؟")
 
-    def test_ignores_lookalikes(self) -> None:
-        self.assertIsNone(match_wake("the milk is cold"))
-        self.assertIsNone(match_wake("المملكة العربية"))
+    def test_ignores_old_wake_and_lookalikes(self) -> None:
+        self.assertIsNone(match_wake("mulk"))
+        self.assertIsNone(match_wake("ملك"))
+        self.assertIsNone(match_wake("Mulk Allah"))
+        self.assertIsNone(match_wake("core"))
+        self.assertIsNone(match_wake("corner office"))
+        self.assertIsNone(match_wake("chorus"))
+        self.assertIsNone(match_wake("كورة"))
         self.assertIsNone(match_wake("hello there"))
-
-    def test_mishear_malk(self) -> None:
-        hit = match_wake("malk tell me a joke")
-        self.assertIsNotNone(hit)
-        assert hit is not None
-        self.assertEqual(hit.remainder, "tell me a joke")
 
     def test_stop_phrases(self) -> None:
         self.assertTrue(is_stop_phrase("Stop Jarvis!"))

@@ -43,7 +43,7 @@ class VoiceJarvis:
         if handle_signals:
             self._install_signals()
         self._banner()
-        print('Waiting for "mulk"…  (Ctrl+C quits)', flush=True)
+        print('Waiting for "kora"…  (Ctrl+C quits)', flush=True)
         while not self.control.quit.is_set():
             try:
                 if self.in_session:
@@ -92,7 +92,7 @@ class VoiceJarvis:
             return
         self._show_user("heard", text)
         wake = match_wake(text)
-        if wake is None:
+        if wake is None or is_stop_phrase(text):
             return
         if wake.remainder and is_stop_phrase(wake.remainder):
             return
@@ -159,4 +159,4 @@ class VoiceJarvis:
         if polite and not self.control.quit.is_set():
             self.speaker.say(goodbye_phrase(heard))
         if not self.control.quit.is_set():
-            print('Waiting for "mulk"…  (Ctrl+C quits)', flush=True)
+            print('Waiting for "kora"…  (Ctrl+C quits)', flush=True)

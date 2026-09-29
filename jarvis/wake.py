@@ -22,17 +22,21 @@ _ARABIC_MAP = str.maketrans(
 
 # Longer phrases are listed first only for readability. Matching picks the
 # earliest token, then the longest phrase at that position.
+# كوره is a realistic hearing of كورا, but ة folds into ه, so it would also
+# wake on كورة (football). Left out.
 _WAKE_RAW = (
-    "mulk allah alsadi",
-    "ملك الله السعدي",
-    "mulk allah",
-    "ملك الله",
-    "mulkallah",
-    "mulk",
-    "malk",
-    "molk",
-    "ملك",
-    "مولك",
+    "hey kora",
+    "hi kora",
+    "يا كورا",
+    "هاي كورا",
+    "kora",
+    "cora",
+    "korra",
+    "corra",
+    "qora",
+    "kura",
+    "كورا",
+    "قورا",
 )
 
 _STOP_RAW = (

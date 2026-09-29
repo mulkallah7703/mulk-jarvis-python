@@ -1,6 +1,6 @@
 # Mulk Jarvis
 
-Voice assistant for **Mulk Allah Alsadi**. It listens from the moment it starts. Say **mulk** (or **ملك** / **Mulk Allah**) and it answers out loud, then keeps listening for the next question. No button, and no wake word between questions.
+Voice assistant for **Mulk Allah Alsadi**. It listens from the moment it starts. Say **Kora** (or **كورا**) and it answers out loud, then keeps listening for the next question. No button, and no wake word between questions.
 
 Two ways to run it:
 
@@ -35,12 +35,12 @@ python -m jarvis
 `python main.py` does the same thing. The first launch downloads the Whisper `base` model.
 
 1. It waits, already listening.
-2. Say **mulk**. It says **Hi Mulk Allah!** and opens a session.
+2. Say **Kora**. It says **Hi Mulk Allah!** and opens a session.
 3. Ask in Arabic or English. It answers in one or two sentences, then listens again.
 4. Say **stop jarvis**, **goodbye**, or **توقف**. It goes back to waiting.
 5. Ctrl+C during a session also goes back to waiting. Ctrl+C while it is waiting quits.
 
-A command in the same breath as the wake word is answered immediately: `mulk what time is it`.
+A command in the same breath as the wake word is answered immediately: `kora what time is it`.
 
 No microphone:
 
@@ -83,7 +83,7 @@ npm test
 
 The Python CLI needs a microphone process, faster-whisper, and edge-tts. That cannot stay running on Vercel serverless. The Next.js app at the repo root keeps the same conversation and leaves `python -m jarvis` unchanged.
 
-1. The page asks for the microphone and listens for **mulk**, **ملك**, or **Mulk Allah**.
+1. The page asks for the microphone and listens for **Kora** or **كورا**.
 2. It says **Hi Mulk Allah!** and opens a session.
 3. Each spoken question is answered out loud. You do not say the wake word again.
 4. **Mute** or **Stop** (or **stop jarvis**, **goodbye**, **توقف**) returns to waiting for the wake word.
@@ -121,7 +121,7 @@ npm run dev
 
 ## العربية
 
-مساعد صوتي لملك الله السعدي. يبدأ بالاستماع فوراً. قل **mulk** أو **ملك** أو **ملك الله**، فيرد: **Hi Mulk Allah!** ثم أجب عن كل سؤال بالصوت دون إعادة كلمة التنبيه.
+مساعد صوتي لملك الله السعدي. يبدأ بالاستماع فوراً. قل **Kora** أو **كورا**، فيرد: **Hi Mulk Allah!** ثم أجب عن كل سؤال بالصوت دون إعادة كلمة التنبيه.
 
 على **Vercel** الصفحة نفسها في المتصفح (Chrome أو Edge): الميكروفون في المتصفح، والإجابة من Gemini. المفتاح `GEMINI_API_KEY` أو `GOOGLE_API_KEY`. النطق من Gemini TTS أو ElevenLabs إن وُجد المفتاح، وإلا صوت المتصفح. **Mute** أو **Stop** أو **توقف** يرجع إلى انتظار كلمة التنبيه. التفاصيل في [Web on Vercel](#web-on-vercel).
 
@@ -146,7 +146,7 @@ GEMINI_API_KEY=your-key
 python -m jarvis
 ```
 
-- قل **ملك** للبدء.
+- قل **كورا** للبدء.
 - اسأل بالعربية أو بالإنجليزية. الجواب جملة أو جملتان، ثم يستمع مباشرة.
 - للرجوع إلى الانتظار: **stop jarvis** أو **توقف** أو **خلاص** أو Ctrl+C.
 - Ctrl+C أثناء الانتظار يغلق البرنامج.

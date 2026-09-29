@@ -526,7 +526,7 @@ export function JarvisApp() {
 
       if (engine.mode === "wake") {
         const wake = matchWake(text);
-        if (!wake || (wake.remainder && isStopPhrase(wake.remainder))) {
+        if (!wake || isStopPhrase(text) || (wake.remainder && isStopPhrase(wake.remainder))) {
           if (!wake) pushLine(engine, "heard", text);
           publish();
           return;
@@ -581,7 +581,7 @@ export function JarvisApp() {
       rec.onerror = (event) => {
         if (event.error === "not-allowed" || event.error === "service-not-allowed") {
           engine.needsTap = true;
-          engine.notice = "Allow the microphone to listen for mulk.";
+          engine.notice = "Allow the microphone to listen for Kora.";
           engine.recOn = false;
           publish();
           return;
@@ -617,7 +617,7 @@ export function JarvisApp() {
       } catch {
         if (engine.closed) return;
         engine.needsTap = true;
-        engine.notice = "Allow the microphone to listen for mulk.";
+        engine.notice = "Allow the microphone to listen for Kora.";
         if (!engine.muted) engine.phase = "listening";
         publish();
         return;
@@ -755,7 +755,7 @@ export function JarvisApp() {
         <ul className="instructions">
           <li>Use Chrome or Edge and allow the mic.</li>
           <li>
-            Say <bdi dir="auto">mulk</bdi> or <bdi dir="auto">ملك</bdi> to wake.
+            Say <bdi dir="auto">Kora</bdi> or <bdi dir="auto">كورا</bdi> to wake.
           </li>
           <li>Keep asking without the wake word.</li>
           <li>
@@ -786,7 +786,7 @@ export function JarvisApp() {
         </div>
         <section className="log" aria-live="polite">
           {view.lines.length === 0 ? (
-            <p className="empty">Say mulk, ملك, or Mulk Allah.</p>
+            <p className="empty">Say Kora or كورا.</p>
           ) : (
             view.lines.map((line) => (
               <p key={line.id} className={`line line-${line.who}`}>
@@ -800,7 +800,7 @@ export function JarvisApp() {
           <input
             value={draft}
             onChange={(event) => setDraft(event.target.value)}
-            placeholder={view.mode === "session" ? "Ask in Arabic or English" : "Type mulk, then a question"}
+            placeholder={view.mode === "session" ? "Ask in Arabic or English" : "Type Kora, then a question"}
             aria-label="Type instead of speaking"
             autoComplete="off"
             enterKeyHint="send"
@@ -904,7 +904,7 @@ function statusLabel(view: View): string {
   if (view.phase === "thinking") return "Thinking · يفكر";
   if (view.mode === "session") return view.needsTap ? "Session · جلسة" : "Listening · يستمع";
   if (view.needsTap) return "Microphone off · الميكروفون مغلق";
-  return "Listening for mulk · قل ملك";
+  return "Listening for Kora · قل كورا";
 }
 
 async function readAnswer(

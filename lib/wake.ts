@@ -15,17 +15,22 @@ const ARABIC_MAP: Record<string, string> = {
   ـ: "",
 };
 
+// Longer phrases first for readability. Matching still picks the earliest
+// token, then the longest phrase there. كوره is a realistic hearing of كورا,
+// but ة folds into ه, so it would also wake on كورة (football). Left out.
 const WAKE_RAW = [
-  "mulk allah alsadi",
-  "ملك الله السعدي",
-  "mulk allah",
-  "ملك الله",
-  "mulkallah",
-  "mulk",
-  "malk",
-  "molk",
-  "ملك",
-  "مولك",
+  "hey kora",
+  "hi kora",
+  "يا كورا",
+  "هاي كورا",
+  "kora",
+  "cora",
+  "korra",
+  "corra",
+  "qora",
+  "kura",
+  "كورا",
+  "قورا",
 ];
 
 const STOP_RAW = [

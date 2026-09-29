@@ -20,7 +20,7 @@ _GHOST_RAW = (
 )
 _GHOSTS = {normalize(phrase) for phrase in _GHOST_RAW}
 _BRACKET = re.compile(r"^\[.*\]$")
-_INITIAL_PROMPT = "Mulk Allah Alsadi. ملك الله السعدي. Jarvis."
+_INITIAL_PROMPT = "Kora. كورا. Hey Kora. يا كورا. هاي كورا."
 
 
 def clean_transcript(text: str) -> str:
