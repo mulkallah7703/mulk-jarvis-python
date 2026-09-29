@@ -120,6 +120,70 @@ export function popSentences(buf: string): { sentences: string[]; rest: string }
   return { sentences, rest };
 }
 
+export type SpeechQueue = { sent: boolean; held: string };
+
+function speechLetters(text: string): number {
+  return sanitizeSpeech(text).replace(/[^\p{L}\p{N}]/gu, "").length;
+}
+
+/** A short or punctuation-only tail is where a fresh TTS call loses the Arabic voice. */
+export function isTinySpeech(text: string): boolean {
+  return speechLetters(text) < 16;
+}
+
+export function coalesceTail(parts: string[]): string[] {
+  const clean = parts.map((part) => sanitizeSpeech(part)).filter(Boolean);
+  while (clean.length >= 2 && isTinySpeech(clean[clean.length - 1] ?? "")) {
+    const last = clean.pop() ?? "";
+    const prev = clean.pop() ?? "";
+    clean.push(`${prev} ${last}`.trim());
+  }
+  return clean.filter((part) => speechLetters(part) > 0);
+}
+
+/**
+ * First complete sentence is returned immediately so speech can start.
+ * Later sentences stay held until the next one arrives, and a short tail
+ * is glued onto the previous sentence instead of becoming its own call.
+ */
+export function feedSpeech(
+  queue: SpeechQueue,
+  sentences: string[],
+  ended: boolean,
+  rest = "",
+): { queue: SpeechQueue; emit: string[] } {
+  const incoming = sentences.map((sentence) => sentence.trim()).filter(Boolean);
+  if (ended) {
+    const tail = rest.trim();
+    if (tail) incoming.push(tail);
+  }
+  const pieces: string[] = [];
+  if (queue.held) pieces.push(queue.held);
+  pieces.push(...incoming);
+
+  if (!ended) {
+    let parts = pieces.slice();
+    if (parts.length >= 2 && isTinySpeech(parts[parts.length - 1] ?? "")) parts = coalesceTail(parts);
+    if (!queue.sent && parts.length <= 1) {
+      const only = sanitizeSpeech(parts[0] ?? "");
+      if (!only || speechLetters(only) === 0) return { queue, emit: [] };
+      return { queue: { sent: true, held: "" }, emit: [only] };
+    }
+    if (parts.length === 0) return { queue: { sent: queue.sent, held: "" }, emit: [] };
+    const held = parts[parts.length - 1] ?? "";
+    const emit = parts.slice(0, -1).map((part) => sanitizeSpeech(part)).filter((part) => speechLetters(part) > 0);
+    return { queue: { sent: queue.sent || emit.length > 0, held }, emit };
+  }
+
+  const emit = coalesceTail(pieces);
+  return { queue: { sent: queue.sent || emit.length > 0, held: "" }, emit };
+}
+
+export function speechLang(text: string, requested: unknown): "ar" | "en" {
+  if (requested === "ar" || requested === "en") return requested;
+  return hasArabic(text) ? "ar" : "en";
+}
+
 const GHOSTS = new Set(GHOST_RAW.map((phrase) => normalize(phrase)));
 
 export function cleanTranscript(text: string): string {

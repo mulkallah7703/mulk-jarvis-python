@@ -11,9 +11,11 @@ import {
   ackPhrase,
   cleanTranscript,
   goodbyePhrase,
+  feedSpeech,
   hasArabic,
   popSentences,
   sanitizeSpeech,
+  type SpeechQueue,
 } from "@/lib/text";
 import { isStopPhrase, matchWake, normalize } from "@/lib/wake";
 
@@ -266,7 +268,7 @@ function speakBrowser(engine: Engine, text: string, generation: number): Promise
     timer = window.setTimeout(() => {
       synth.cancel();
       finish();
-    }, Math.min(12000, 900 + text.length * 70));
+    }, Math.min(30_000, Math.max(2500, 800 + text.length * 140)));
     utterance.onend = finish;
     utterance.onerror = finish;
     if (engine.generation !== generation) {
@@ -300,43 +302,104 @@ function playBlob(engine: Engine, blob: Blob, generation: number): Promise<boole
   });
 }
 
-async function speakServer(engine: Engine, text: string, generation: number): Promise<boolean> {
-  const abort = new AbortController();
-  engine.ttsAbort = abort;
-  try {
-    const response = await fetch("/api/tts", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ text }),
-      signal: abort.signal,
-    });
-    if (engine.generation !== generation) return true;
-    const type = (response.headers.get("content-type") || "").split(";")[0].trim();
-    if (!response.ok || !type.startsWith("audio/")) return false;
-    const downloaded = await response.blob();
-    if (engine.generation !== generation) return true;
-    const blob = downloaded.type ? downloaded : new Blob([downloaded], { type });
-    return playBlob(engine, blob, generation);
-  } catch {
-    return engine.generation !== generation || abort.signal.aborted;
+type SpeechClip = { blob: Blob; provider: string };
+
+async function fetchClip(
+  engine: Engine,
+  text: string,
+  generation: number,
+  lang: "ar" | "en",
+  previous: string,
+  lock: boolean,
+  signal: AbortSignal,
+): Promise<SpeechClip | null> {
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    if (signal.aborted || engine.generation !== generation) return null;
+    try {
+      const response = await fetch("/api/tts", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          text,
+          lang,
+          ...(previous ? { previous } : {}),
+          ...(lock ? { lock: true } : {}),
+        }),
+        signal,
+      });
+      if (engine.generation !== generation || signal.aborted) return null;
+      const provider = (response.headers.get("x-tts") || "").toLowerCase();
+      const type = (response.headers.get("content-type") || "").split(";")[0].trim();
+      const audio = response.ok && type.startsWith("audio/");
+      const sameVoice = !lock || provider === "elevenlabs";
+      if (!audio || !sameVoice) {
+        await response.body?.cancel().catch(() => undefined);
+        if (attempt === 0) continue;
+        return null;
+      }
+      const downloaded = await response.blob();
+      if (engine.generation !== generation || signal.aborted) return null;
+      const blob = downloaded.type ? downloaded : new Blob([downloaded], { type });
+      return { blob, provider: provider || "server" };
+    } catch {
+      if (signal.aborted || engine.generation !== generation) return null;
+    }
   }
+  return null;
+}
+
+async function playClip(
+  engine: Engine,
+  text: string,
+  generation: number,
+  clip: SpeechClip | null,
+  voice: { name: string | null },
+  publish: () => void,
+): Promise<void> {
+  if (engine.generation !== generation) return;
+  const fallback = async () => {
+    voice.name = "browser";
+    rememberSpoken(engine, text);
+    engine.phase = "speaking";
+    publish();
+    await speakBrowser(engine, text, generation);
+  };
+  if (voice.name === "browser") {
+    await fallback();
+    return;
+  }
+  const provider = clip ? (clip.provider === "elevenlabs" ? "elevenlabs" : "server") : "";
+  if (!clip || (voice.name && voice.name !== provider)) {
+    // A later chunk must not switch from Mazen to Gemini or the browser voice.
+    if (voice.name === "elevenlabs" || voice.name === "server") return;
+    await fallback();
+    return;
+  }
+  voice.name = provider;
+  rememberSpoken(engine, text);
+  engine.phase = "speaking";
+  publish();
+  const played = await playBlob(engine, clip.blob, generation);
+  if (played || engine.generation !== generation || voice.name === "elevenlabs") return;
+  await fallback();
 }
 
 async function speakText(engine: Engine, text: string, generation: number, publish: () => void): Promise<void> {
   const spoken = sanitizeSpeech(text);
   if (!spoken || engine.generation !== generation) return;
-  rememberSpoken(engine, spoken);
-  engine.phase = "speaking";
-  publish();
-  const useServer = engine.tts !== "browser" && !engine.ttsFailed;
-  if (useServer) {
-    const ok = await speakServer(engine, spoken, generation);
-    if (engine.generation !== generation) return;
-    if (ok) return;
-    engine.ttsFailed = true;
+  const abort = new AbortController();
+  engine.ttsAbort = abort;
+  const voice: { name: string | null } = { name: engine.ttsFailed ? "browser" : null };
+  if (voice.name === "browser") {
+    rememberSpoken(engine, spoken);
+    engine.phase = "speaking";
+    publish();
+    await speakBrowser(engine, spoken, generation);
+    return;
   }
-  if (engine.generation !== generation) return;
-  await speakBrowser(engine, spoken, generation);
+  const clip = await fetchClip(engine, spoken, generation, hasArabic(spoken) ? "ar" : "en", "", false, abort.signal);
+  await playClip(engine, spoken, generation, clip, voice, publish);
+  if (voice.name === "browser") engine.ttsFailed = true;
 }
 
 function bestTranscript(result: SpeechResult, mode: Mode): string {
@@ -381,6 +444,7 @@ export function JarvisApp() {
     };
 
     const answer = async (command: string, generation: number) => {
+      engine.ttsFailed = false;
       const cleaned = sanitizeSpeech(command);
       if (!cleaned || engine.generation !== generation) {
         releaseMic();
@@ -416,6 +480,7 @@ export function JarvisApp() {
     };
 
     const sayFixed = async (text: string, generation: number) => {
+      engine.ttsFailed = false;
       pushLine(engine, "jarvis", text);
       publish();
       await speakText(engine, text, generation, publish);
@@ -861,10 +926,35 @@ async function readAnswer(
   let full = "";
   let pending = "";
   let chain = Promise.resolve();
-  let queued = false;
+  let queued = 0;
+  let context = "";
+  let speech: SpeechQueue = { sent: false, held: "" };
+  const voice: { name: string | null } = { name: null };
+  const speakAbort = new AbortController();
+  engine.ttsAbort = speakAbort;
   const queue = (sentence: string) => {
-    queued = true;
-    chain = chain.then(() => speakText(engine, sentence, generation, publish));
+    const spoken = sanitizeSpeech(sentence);
+    if (!spoken || engine.generation !== generation) return;
+    const lang = hasArabic(full) || hasArabic(spoken) ? "ar" : "en";
+    const previous = context.slice(-300);
+    const lock = queued > 0;
+    queued += 1;
+    context = `${context} ${spoken}`.trim();
+    const pendingClip = fetchClip(engine, spoken, generation, lang, previous, lock, speakAbort.signal);
+    chain = chain.then(async () => {
+      if (engine.generation !== generation || speakAbort.signal.aborted) return;
+      const clip = await pendingClip;
+      if (engine.generation !== generation || speakAbort.signal.aborted) return;
+      await playClip(engine, spoken, generation, clip, voice, publish);
+    });
+  };
+  const flush = (ended: boolean) => {
+    const popped = popSentences(pending);
+    pending = popped.rest;
+    const fed = feedSpeech(speech, popped.sentences, ended, ended ? pending : "");
+    speech = fed.queue;
+    if (ended) pending = "";
+    for (const sentence of fed.emit) queue(sentence);
   };
   while (true) {
     const { done, value } = await reader.read();
@@ -872,17 +962,21 @@ async function readAnswer(
       await reader.cancel().catch(() => undefined);
       break;
     }
-    if (done) break;
+    if (done) {
+      const tail = decoder.decode();
+      if (tail) {
+        full += tail;
+        pending += tail;
+      }
+      break;
+    }
     const chunk = decoder.decode(value, { stream: true });
     full += chunk;
     pending += chunk;
     onPartial(full);
-    const popped = popSentences(pending);
-    pending = popped.rest;
-    for (const sentence of popped.sentences) queue(sentence);
+    flush(false);
   }
-  const tail = pending.trim();
-  if (tail && engine.generation === generation) queue(tail);
+  if (engine.generation === generation) flush(true);
   await chain;
   if (!queued && engine.generation === generation) {
     await speakText(engine, sanitizeSpeech(full) || EMPTY_ANSWER, generation, publish);
