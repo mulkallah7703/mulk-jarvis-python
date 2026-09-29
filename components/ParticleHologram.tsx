@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef } from "react";
-import { sampleSpeechLevel, waveMotion } from "@/lib/speech-level";
+import { noteWaveLevel, sampleSpeechLevel, waveOffsetAt } from "@/lib/speech-level";
 import type { OrbState } from "./orb-state";
 
 const DOT = 2;
@@ -60,8 +60,6 @@ export default function ParticleHologram({ mode = "idle", energy = 0 }: Props) {
     let imgW = 0;
     let imgH = 0;
     let builtKey = "";
-    let flowAmp = 0.8;
-    let flowSpeed = 0.00025;
     const mouse = { x: -9999, y: -9999 };
     const reduced =
       typeof window !== "undefined" &&
@@ -120,9 +118,7 @@ export default function ParticleHologram({ mode = "idle", energy = 0 }: Props) {
       const R2 = MOUSE_R * MOUSE_R;
       const jitter = JITTER * jitterMul;
       const shimmer = SHIMMER * shimmerMul;
-      const motion = waveMotion(st, sampleSpeechLevel());
-      flowAmp += (motion.amp - flowAmp) * 0.08;
-      flowSpeed += (motion.speed - flowSpeed) * 0.08;
+      noteWaveLevel(st, t, sampleSpeechLevel());
 
       for (let i = 0; i < N; i++) {
         const dx = p.x[i] - mouse.x;
@@ -145,9 +141,8 @@ export default function ParticleHologram({ mode = "idle", energy = 0 }: Props) {
         let jx = Math.sin(ph) * jitter;
         let jy = Math.cos(ph * 1.3) * jitter;
         if (p.kind[i] === 1) {
-          const along = p.hx[i] * 0.012 + t * flowSpeed + p.ph[i];
-          jx += Math.sin(along) * flowAmp;
-          jy += Math.cos(along * 0.7) * flowAmp * 0.42;
+          const amp = waveOffsetAt(p.hx[i] / W);
+          jy += Math.sin(p.ph[i] * 1.7) * amp;
         }
         let a = 1.25 - shimmer * 0.5 + Math.sin(ph * 2.1) * shimmer * 0.5;
         const rel = p.hy[i] / H - scan;
