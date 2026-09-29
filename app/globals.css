@@ -81,8 +81,7 @@ button {
   width: 100vw;
   height: 100vh;
   height: 100dvh;
-  object-fit: contain;
-  object-position: center center;
+  object-fit: fill;
   background: #000;
   cursor: crosshair;
 }

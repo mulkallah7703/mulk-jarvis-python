@@ -68,11 +68,8 @@ export default function ParticleHologram({ mode = "idle", energy = 0 }: Props) {
     const onMove = (e: MouseEvent) => {
       if (!W || !H) return;
       const rect = canvas.getBoundingClientRect();
-      const scale = Math.min(rect.width / W, rect.height / H);
-      const ox = (rect.width - W * scale) / 2;
-      const oy = (rect.height - H * scale) / 2;
-      mouse.x = (e.clientX - rect.left - ox) / scale;
-      mouse.y = (e.clientY - rect.top - oy) / scale;
+      mouse.x = ((e.clientX - rect.left) / rect.width) * W;
+      mouse.y = ((e.clientY - rect.top) / rect.height) * H;
     };
     const onLeave = () => {
       mouse.x = mouse.y = -9999;
@@ -168,43 +165,50 @@ export default function ParticleHologram({ mode = "idle", energy = 0 }: Props) {
     const quality = () => {
       const cssW = Math.max(1, window.innerWidth);
       const cssH = Math.max(1, window.innerHeight);
-      const dpr = Math.min(window.devicePixelRatio || 1, 1.75);
+      const wide = cssW > cssH * 1.12;
+      const dpr = Math.min(window.devicePixelRatio || 1, wide ? 1.35 : 1.75);
       const area = cssW * cssH;
-      let side = Math.round(Math.min(cssW, cssH) * dpr);
+      let bw = Math.round(cssW * dpr);
+      let bh = Math.round(cssH * dpr);
+      const capLong = wide ? 1680 : 1120;
+      const fit = Math.min(1, capLong / Math.max(bw, bh));
+      bw = Math.max(320, Math.round(bw * fit));
+      bh = Math.max(320, Math.round(bh * fit));
       let faceStep = 2;
       let bodyStep = 3;
       if (area < 480_000) {
-        side = Math.min(side, 700);
         faceStep = 3;
         bodyStep = 4;
-      } else if (area < 1_100_000) {
-        side = Math.min(side, 960);
-        faceStep = 2;
-        bodyStep = 3;
-      } else {
-        side = Math.min(side, 1120);
-        faceStep = 2;
-        bodyStep = 3;
       }
       if ((navigator.hardwareConcurrency || 4) <= 2) {
         faceStep += 1;
         bodyStep += 1;
       }
-      return { side: Math.max(480, side), faceStep, bodyStep };
+      const side = Math.min(bw, bh);
+      return {
+        bw,
+        bh,
+        side,
+        ox: (bw - side) / 2,
+        oy: (bh - side) / 2,
+        faceStep,
+        bodyStep,
+        wide,
+      };
     };
 
     const build = () => {
       if (!alive || !src || !imgW || !imgH) return;
-      const { side, faceStep, bodyStep } = quality();
-      const key = `${side}:${faceStep}:${bodyStep}`;
+      const { bw, bh, side, ox, oy, faceStep, bodyStep, wide } = quality();
+      const key = `${bw}:${bh}:${faceStep}:${bodyStep}:${wide ? 1 : 0}`;
       if (key === builtKey && particles) return;
       builtKey = key;
       cancelAnimationFrame(raf);
 
-      W = side;
-      H = side;
-      canvas.width = side;
-      canvas.height = side;
+      W = bw;
+      H = bh;
+      canvas.width = bw;
+      canvas.height = bh;
       const scale = side / imgW;
       const px: number[] = [];
       const py: number[] = [];
@@ -212,21 +216,38 @@ export default function ParticleHologram({ mode = "idle", energy = 0 }: Props) {
       const pg: number[] = [];
       const pb: number[] = [];
       const ph: number[] = [];
+      const cap = wide ? 48000 : 24000;
       const seen = new Uint8Array(imgW * imgH);
-      const push = (x: number, y: number, r: number, g: number, b: number) => {
-        const slot = y * imgW + x;
-        if (seen[slot]) return;
-        seen[slot] = 1;
-        px.push(x * scale);
-        py.push(y * scale);
+      const pushWorld = (x: number, y: number, r: number, g: number, b: number) => {
+        if (px.length >= cap || y < 0 || x < 0 || y >= bh || x >= bw) return;
+        px.push(x);
+        py.push(y);
         pr.push(r);
         pg.push(g);
         pb.push(b);
         ph.push(Math.random() * Math.PI * 2);
       };
+      const push = (x: number, y: number, r: number, g: number, b: number) => {
+        const slot = y * imgW + x;
+        if (seen[slot]) return;
+        seen[slot] = 1;
+        pushWorld(ox + x * scale, oy + y * scale, r, g, b);
+      };
       const lumOf = (r: number, g: number, b: number) => 0.2126 * r + 0.7152 * g + 0.0722 * b;
       const isGold = (r: number, g: number, b: number) => r > 140 && g > 70 && b < 170 && r > b + 20;
       const isFigure = (r: number, g: number, b: number) => b > 95 && lumOf(r, g, b) > 48;
+
+      const starCount = Math.min(wide ? 1600 : 520, Math.round((bw * bh) / (wide ? 1600 : 2800)));
+      for (let i = 0; i < starCount; i += 1) {
+        const hot = Math.random() > 0.88;
+        pushWorld(
+          Math.random() * bw,
+          Math.random() * bh,
+          hot ? 170 + Math.random() * 70 : 30 + Math.random() * 35,
+          hot ? 200 + Math.random() * 40 : 80 + Math.random() * 50,
+          200 + Math.random() * 55,
+        );
+      }
 
       for (let y = 0; y < imgH; y += 1) {
         const ny = y / imgH;
@@ -273,6 +294,25 @@ export default function ParticleHologram({ mode = "idle", energy = 0 }: Props) {
           const b = src[i + 2] ?? 0;
           if (!isGold(r, g, b)) continue;
           push(x, y, r, g, b);
+        }
+      }
+
+      if (wide) {
+        const spacing = Math.max(4, bodyStep + 1);
+        const y0 = oy + side * 0.7;
+        const y1 = oy + side * 0.97;
+        for (let x = 0; x < bw; x += spacing) {
+          const rel = (x - ox) / side;
+          if (rel > 0.36 && rel < 0.64) continue;
+          const crest = 0.5 + 0.5 * Math.sin(x * 0.018);
+          const ridge = 0.28 + crest * 0.42;
+          for (let y = y0; y < y1; y += spacing) {
+            const ny = (y - y0) / (y1 - y0);
+            const band = Math.exp(-((ny - ridge) * (ny - ridge)) / 0.018);
+            if (band < 0.22 && Math.random() > 0.12) continue;
+            const glow = 0.28 + band * 0.72;
+            pushWorld(x, y, 18 + glow * 90, 90 + glow * 120, 170 + glow * 80);
+          }
         }
       }
 
