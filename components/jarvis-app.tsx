@@ -15,9 +15,10 @@ import {
   hasArabic,
   popSentences,
   sanitizeSpeech,
+  withoutUnaskedClock,
   type SpeechQueue,
 } from "@/lib/text";
-import { bindSpeechLevel } from "@/lib/speech-level";
+import { playSpeechBlob, primeWaveAudio, stopSpeechPlayback } from "@/lib/speech-level";
 import { isStopPhrase, matchWake, normalize } from "@/lib/wake";
 
 type Mode = "wake" | "session";
@@ -206,6 +207,7 @@ function startRec(engine: Engine): void {
 function stopAudio(engine: Engine): void {
   engine.chatAbort?.abort();
   engine.ttsAbort?.abort();
+  stopSpeechPlayback();
   if (engine.audio) {
     engine.audio.pause();
     engine.audio = null;
@@ -282,27 +284,8 @@ function speakBrowser(engine: Engine, text: string, generation: number): Promise
 }
 
 function playBlob(engine: Engine, blob: Blob, generation: number): Promise<boolean> {
-  return new Promise((resolve) => {
-    const url = URL.createObjectURL(blob);
-    const audio = new Audio(url);
-    engine.audio = audio;
-    const releaseLevel = bindSpeechLevel(audio);
-    let settled = false;
-    const finish = (ok: boolean) => {
-      if (settled) return;
-      settled = true;
-      releaseLevel();
-      URL.revokeObjectURL(url);
-      if (engine.audio === audio) engine.audio = null;
-      resolve(ok);
-    };
-    audio.onended = () => finish(true);
-    audio.onerror = () => finish(false);
-    audio.onpause = () => {
-      if (engine.generation !== generation) finish(false);
-    };
-    audio.play().catch(() => finish(false));
-  });
+  primeWaveAudio();
+  return playSpeechBlob(blob, () => engine.generation !== generation);
 }
 
 type SpeechClip = { blob: Blob; provider: string };
@@ -602,6 +585,7 @@ export function JarvisApp() {
     };
 
     const arm = async () => {
+      primeWaveAudio();
       engine.muted = false;
       engine.needsTap = false;
       engine.notice = "";
@@ -699,6 +683,7 @@ export function JarvisApp() {
     };
     const unlock = () => {
       window.speechSynthesis?.resume();
+      primeWaveAudio();
     };
     window.addEventListener("keydown", onKey);
     window.addEventListener("pointerdown", unlock);
@@ -916,6 +901,8 @@ async function readAnswer(
   publish: () => void,
   onPartial: (text: string) => void,
 ): Promise<string> {
+  const asked = [...engine.history].reverse().find((message) => message.role === "user")?.content || "";
+  const show = (text: string) => withoutUnaskedClock(asked, text);
   const abort = new AbortController();
   engine.chatAbort = abort;
   const response = await fetch("/api/chat", {
@@ -937,7 +924,7 @@ async function readAnswer(
   const speakAbort = new AbortController();
   engine.ttsAbort = speakAbort;
   const queue = (sentence: string) => {
-    const spoken = sanitizeSpeech(sentence);
+    const spoken = sanitizeSpeech(show(sentence));
     if (!spoken || engine.generation !== generation) return;
     const lang = hasArabic(full) || hasArabic(spoken) ? "ar" : "en";
     const previous = context.slice(-300);
@@ -977,13 +964,13 @@ async function readAnswer(
     const chunk = decoder.decode(value, { stream: true });
     full += chunk;
     pending += chunk;
-    onPartial(full);
+    onPartial(show(full));
     flush(false);
   }
   if (engine.generation === generation) flush(true);
   await chain;
   if (!queued && engine.generation === generation) {
-    await speakText(engine, sanitizeSpeech(full) || EMPTY_ANSWER, generation, publish);
+    await speakText(engine, sanitizeSpeech(show(full)) || EMPTY_ANSWER, generation, publish);
   }
-  return full;
+  return show(full);
 }

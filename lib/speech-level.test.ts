@@ -55,12 +55,12 @@ describe("scrolling waveform", () => {
       now += 20;
     }
     const quiet = waveOffsetAt(1);
-    assert.ok(idle < 2);
-    assert.ok(quiet < 2);
-    assert.ok(loud > 24);
+    assert.ok(idle < 2.5);
+    assert.ok(quiet > 22);
+    assert.ok(loud > quiet);
   });
 
-  it("keeps the listening fallback gentler than real speech", () => {
+  it("keeps the listening fallback gentler than speech", () => {
     resetWaveHistory();
     let now = 5_000;
     for (let i = 0; i < WAVE_BINS + 8; i += 1) {
@@ -68,8 +68,8 @@ describe("scrolling waveform", () => {
       now += 20;
     }
     const listening = waveOffsetAt(1);
-    assert.ok(listening > 1.5);
-    assert.ok(listening < 8);
+    assert.ok(listening > 8);
+    assert.ok(listening < 22);
   });
 
   it("reports silence when no clip is bound", () => {

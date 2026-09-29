@@ -30,6 +30,21 @@ export function goodbyePhrase(text: string): string {
   return hasArabic(text) ? "حاضر." : "Okay.";
 }
 
+const CLOCK_ASK =
+  /what\s+time|what'?s the time|whats the time|what\s+date|today'?s date|the date|where am i|where are we|what(?:'s| is) (?:my )?location|timezone|time zone|كم الساعة|كم الوقت|وش الساعة|الساعة كم|كم اليوم|وش التاريخ|التاريخ|وين انا|وين أنا|وينك|الموقع|المنطقة الزمنية/i;
+
+const CLOCK_TAIL =
+  /(?:^|\s+)(?:(?:mon|tue|wed|thu|fri|sat|sun)\w*,?\s+\d{1,2}\s+[a-z]{3,9},?\s+\d{1,2}:\d{2}(?:\s+asia\/riyadh)?|asia\/riyadh)\s*$/i;
+
+export function asksForClock(text: string): boolean {
+  return CLOCK_ASK.test(text || "");
+}
+
+export function withoutUnaskedClock(ask: string, answer: string): string {
+  if (asksForClock(ask)) return answer;
+  return (answer || "").replace(CLOCK_TAIL, "").replace(/\s+/g, " ").trim();
+}
+
 export function sanitizeSpeech(text: string): string {
   return (text || "").replace(/[*_`#]+/g, "").replace(/\s+/g, " ").trim();
 }
