@@ -478,19 +478,17 @@ export function JarvisApp() {
       await speakText(engine, text, generation, publish);
     };
 
-    const armSpotify = (command: string) => {
+    const startSpotify = (command: string, generation: number): Promise<void> | null => {
       const intent = matchSpotify(command);
-      if (!intent) return false;
+      if (!intent) return null;
+      const line = spotifyLine(command, intent);
       const target = spotifyTarget(intent);
+      // Start the line in this turn, then open. Neither waits for the other to finish.
+      const speaking = sayFixed(line, generation).then(() => {
+        if (engine.generation === generation) releaseMic();
+      });
       engine.spotifyPrompt = launchSpotify(target) ? null : target;
-      return true;
-    };
-
-    const speakSpotify = async (command: string, generation: number) => {
-      const intent = matchSpotify(command);
-      if (!intent) return;
-      await sayFixed(spotifyLine(command, intent), generation);
-      if (engine.generation === generation) releaseMic();
+      return speaking;
     };
 
     const openSession = async (remainder: string) => {
@@ -498,13 +496,16 @@ export function JarvisApp() {
       engine.mode = "session";
       engine.busy = true;
       pauseRec(engine);
+      if (remainder.trim() && matchSpotify(remainder)) {
+        const speaking = startSpotify(remainder, generation);
+        if (speaking) {
+          await speaking;
+          return;
+        }
+      }
       await sayFixed(GREETING, generation);
       if (engine.generation !== generation || engine.mode !== "session") return;
       if (remainder.trim()) {
-        if (matchSpotify(remainder)) {
-          await speakSpotify(remainder, generation);
-          return;
-        }
         engine.spotifyPrompt = null;
         await answer(remainder, generation);
         return;
@@ -548,9 +549,15 @@ export function JarvisApp() {
         pauseRec(engine);
         pushLine(engine, "you", text);
         const spotify = matchSpotify(wake.remainder) ? wake.remainder : matchSpotify(text) ? text : "";
-        if (!spotify || !armSpotify(spotify)) engine.spotifyPrompt = null;
+        const speaking = spotify ? startSpotify(spotify, engine.generation) : null;
+        if (!speaking) engine.spotifyPrompt = null;
         publish();
-        await openSession(spotify || wake.remainder);
+        if (speaking) {
+          engine.mode = "session";
+          await speaking;
+          return;
+        }
+        await openSession(wake.remainder);
         return;
       }
 
@@ -574,9 +581,10 @@ export function JarvisApp() {
         return;
       }
       const command = matchSpotify(text) ? text : wake?.remainder || text;
-      if (armSpotify(command)) {
+      const speaking = startSpotify(command, engine.generation);
+      if (speaking) {
         publish();
-        await speakSpotify(command, engine.generation);
+        await speaking;
         return;
       }
       engine.spotifyPrompt = null;
