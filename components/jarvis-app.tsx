@@ -19,6 +19,7 @@ import {
   type SpeechQueue,
 } from "@/lib/text";
 import { playSpeechBlob, primeWaveAudio, stopSpeechPlayback } from "@/lib/speech-level";
+import { launchSpotify, matchSpotify, spotifyLine, spotifyTarget, type SpotifyTarget } from "@/lib/spotify";
 import { isStopPhrase, matchWake, normalize } from "@/lib/wake";
 
 type Mode = "wake" | "session";
@@ -74,6 +75,7 @@ type Engine = {
   audio: HTMLAudioElement | null;
   chatAbort: AbortController | null;
   ttsAbort: AbortController | null;
+  spotifyPrompt: SpotifyTarget | null;
 };
 
 type View = {
@@ -88,6 +90,7 @@ type View = {
   unsupported: boolean;
   lang: Lang;
   lines: Line[];
+  spotifyPrompt: boolean;
 };
 
 type Api = {
@@ -96,6 +99,7 @@ type Api = {
   toggleMute: () => void;
   setLang: (lang: Lang) => void;
   submit: (text: string) => void;
+  openSpotify: () => void;
 };
 
 const LANG_KEY = "mulk-jarvis-stt-lang";
@@ -139,6 +143,7 @@ function createEngine(): Engine {
     audio: null,
     chatAbort: null,
     ttsAbort: null,
+    spotifyPrompt: null,
   };
 }
 
@@ -155,6 +160,7 @@ function snapshot(engine: Engine): View {
     unsupported: engine.unsupported,
     lang: engine.lang,
     lines: engine.lines.map((line) => ({ ...line })),
+    spotifyPrompt: Boolean(engine.spotifyPrompt),
   };
 }
 
@@ -472,6 +478,21 @@ export function JarvisApp() {
       await speakText(engine, text, generation, publish);
     };
 
+    const armSpotify = (command: string) => {
+      const intent = matchSpotify(command);
+      if (!intent) return false;
+      const target = spotifyTarget(intent);
+      engine.spotifyPrompt = launchSpotify(target) ? null : target;
+      return true;
+    };
+
+    const speakSpotify = async (command: string, generation: number) => {
+      const intent = matchSpotify(command);
+      if (!intent) return;
+      await sayFixed(spotifyLine(command, intent), generation);
+      if (engine.generation === generation) releaseMic();
+    };
+
     const openSession = async (remainder: string) => {
       const generation = engine.generation;
       engine.mode = "session";
@@ -480,6 +501,11 @@ export function JarvisApp() {
       await sayFixed(GREETING, generation);
       if (engine.generation !== generation || engine.mode !== "session") return;
       if (remainder.trim()) {
+        if (matchSpotify(remainder)) {
+          await speakSpotify(remainder, generation);
+          return;
+        }
+        engine.spotifyPrompt = null;
         await answer(remainder, generation);
         return;
       }
@@ -490,6 +516,7 @@ export function JarvisApp() {
       engine.generation += 1;
       const generation = engine.generation;
       stopAudio(engine);
+      engine.spotifyPrompt = null;
       engine.mode = "wake";
       engine.history = [];
       engine.busy = true;
@@ -520,6 +547,7 @@ export function JarvisApp() {
         engine.busy = true;
         pauseRec(engine);
         pushLine(engine, "you", text);
+        if (!wake.remainder || !armSpotify(wake.remainder)) engine.spotifyPrompt = null;
         publish();
         await openSession(wake.remainder);
         return;
@@ -544,7 +572,14 @@ export function JarvisApp() {
         if (engine.generation === generation) releaseMic();
         return;
       }
-      await answer(wake?.remainder || text, engine.generation);
+      const command = wake?.remainder || text;
+      if (armSpotify(command)) {
+        publish();
+        await speakSpotify(command, engine.generation);
+        return;
+      }
+      engine.spotifyPrompt = null;
+      await answer(command, engine.generation);
     };
 
     const ensureRec = (Ctor: new () => SpeechRec) => {
@@ -639,6 +674,7 @@ export function JarvisApp() {
         engine.busy = false;
         engine.muted = false;
         engine.interim = "";
+        engine.spotifyPrompt = null;
         engine.phase = "listening";
         publish();
         startRec(engine);
@@ -676,6 +712,12 @@ export function JarvisApp() {
         if (!engine.recOn) startRec(engine);
       },
       submit: (text) => void accept(text),
+      openSpotify: () => {
+        const target = engine.spotifyPrompt;
+        if (!target) return;
+        if (launchSpotify(target)) engine.spotifyPrompt = null;
+        publish();
+      },
     };
 
     const onKey = (event: KeyboardEvent) => {
@@ -818,6 +860,11 @@ export function JarvisApp() {
                 <p className="banner">Add a Gemini API key to answer questions. Wake word still works.</p>
               ) : null}
               {view.notice ? <p className="notice">{view.notice}</p> : null}
+              {view.spotifyPrompt ? (
+                <button type="button" className="spotify-toast" onClick={() => api.current?.openSpotify()}>
+                  Open Spotify
+                </button>
+              ) : null}
               {view.needsTap ? (
                 <button type="button" className="tap" onClick={() => api.current?.arm()}>
                   Enable microphone
