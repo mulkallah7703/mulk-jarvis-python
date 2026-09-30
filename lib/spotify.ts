@@ -16,21 +16,68 @@ export type SpotifyTarget = {
   web: string;
 };
 
-const SPOTIFY = "(?:spotify|سبوتيفاي|سبوتفاي|سبوتي فاي|سبوت فاي)";
+const SPOTIFY = "(?:ال\\s+)?spotify";
 const MUSIC = "(?:ال)?(?:موسيقي|اغاني|اغنيه)";
+const LEADING_WAKE =
+  /^(?:hey kora|hi kora|ya kora|يا كورا|هاي كورا|kora|cora|korra|corra|qora|kura|كورا|قورا)\s+/;
 const LEAD =
   /^(?:please|pls|hey|hi|ok|okay|now|can you|could you|would you|لو سمحت|من فضلك|ياخي|يا|ابي|ابغى|ابغي|ودي|خلني|خل)\s+/;
 const TRAIL = /\s+(?:please|pls|now|لو سمحت|من فضلك|الحين)$/;
 
+// Longer aliases first. Web Speech often splits or misspells the name.
+const SPOTIFY_ALIASES: string[][] = [
+  ["spot", "a", "fi"],
+  ["spot", "if", "i"],
+  ["spotty", "fly"],
+  ["spotify", "fly"],
+  ["spoti", "fy"],
+  ["spoti", "fai"],
+  ["سبوتي", "فاي"],
+  ["سبوت", "يفاي"],
+  ["سبوت", "فاي"],
+  ["السبوتيفاي"],
+  ["السبوتفاي"],
+  ["السبوتيفي"],
+  ["سبوتيفاي"],
+  ["سبوتفاي"],
+  ["سبوتيفي"],
+  ["سبوتفي"],
+  ["spotifi"],
+  ["spotifai"],
+  ["spotify"],
+];
+
+function foldSpotify(text: string): string {
+  const tokens = text.split(" ").filter(Boolean);
+  const aliases = [...SPOTIFY_ALIASES].sort((a, b) => b.length - a.length || b.join(" ").length - a.join(" ").length);
+  const folded: string[] = [];
+  for (let index = 0; index < tokens.length; ) {
+    const alias = aliases.find((parts) => parts.every((part, offset) => tokens[index + offset] === part));
+    if (alias) {
+      folded.push("spotify");
+      index += alias.length;
+      continue;
+    }
+    folded.push(tokens[index] ?? "");
+    index += 1;
+  }
+  return folded.join(" ");
+}
+
 function corePhrase(raw: string): string {
   let text = normalize(raw);
+  for (let pass = 0; pass < 3; pass += 1) {
+    const next = text.replace(LEADING_WAKE, "").trim();
+    if (next === text) break;
+    text = next;
+  }
   for (let pass = 0; pass < 4; pass += 1) {
     const next = text.replace(LEAD, "");
     if (next === text) break;
     text = next;
   }
   text = text.replace(TRAIL, "");
-  return text.replace(/\s+/g, " ").trim();
+  return foldSpotify(text).replace(/\s+/g, " ").trim();
 }
 
 function cleanQuery(query: string): string {
@@ -66,7 +113,7 @@ export function matchSpotify(raw: string): SpotifyIntent | null {
   if (!text || text.length > 140) return null;
 
   const openHome = new RegExp(
-    `^(?:open|launch|start)\\s+(?:up\\s+)?(?:the\\s+|my\\s+)?${SPOTIFY}$|^(?:افتح|فتح)\\s+(?:لي\\s+)?${SPOTIFY}$|^${SPOTIFY}$`,
+    `^(?:open|launch|start|play)\\s+(?:up\\s+)?(?:the\\s+|my\\s+)?${SPOTIFY}$|^(?:افتح|فتح|شغل|حط|طق)\\s+(?:لي\\s+)?${SPOTIFY}$|^${SPOTIFY}$`,
   );
   if (openHome.test(text)) return { kind: "open", query: "" };
 

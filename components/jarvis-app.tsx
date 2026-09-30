@@ -547,9 +547,10 @@ export function JarvisApp() {
         engine.busy = true;
         pauseRec(engine);
         pushLine(engine, "you", text);
-        if (!wake.remainder || !armSpotify(wake.remainder)) engine.spotifyPrompt = null;
+        const spotify = matchSpotify(wake.remainder) ? wake.remainder : matchSpotify(text) ? text : "";
+        if (!spotify || !armSpotify(spotify)) engine.spotifyPrompt = null;
         publish();
-        await openSession(wake.remainder);
+        await openSession(spotify || wake.remainder);
         return;
       }
 
@@ -566,13 +567,13 @@ export function JarvisApp() {
         await endSession(text);
         return;
       }
-      if (wake && !wake.remainder) {
+      if (wake && !wake.remainder && !matchSpotify(text)) {
         const generation = engine.generation;
         await sayFixed(ackPhrase(text), generation);
         if (engine.generation === generation) releaseMic();
         return;
       }
-      const command = wake?.remainder || text;
+      const command = matchSpotify(text) ? text : wake?.remainder || text;
       if (armSpotify(command)) {
         publish();
         await speakSpotify(command, engine.generation);

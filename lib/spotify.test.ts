@@ -4,6 +4,29 @@ import { describe, it } from "node:test";
 import { matchSpotify, spotifyLine, spotifyTarget } from "./spotify.ts";
 
 describe("spotify intents", () => {
+  it("matches the live transcripts that missed, including punctuation and a leading wake", () => {
+    for (const phrase of [
+      "افتح spotify.",
+      "Open Spotify.",
+      "kora open spotify",
+      "Kora, open Spotify.",
+      "شغل spotify",
+      "افتح سبوتيفي.",
+      "spotty fly",
+      "spot a fi",
+      "open  Spotify!",
+      "افتح، spotify؟",
+    ]) {
+      const intent = matchSpotify(phrase);
+      assert.ok(intent, phrase);
+      assert.equal(intent.kind, "open", phrase);
+      assert.equal(intent.query, "", phrase);
+      const target = spotifyTarget(intent);
+      assert.equal(target.uri, "spotify:", phrase);
+      assert.equal(target.web, "https://open.spotify.com", phrase);
+    }
+  });
+
   it("opens Spotify home for a plain open command", () => {
     for (const phrase of ["open spotify", "Open Spotify", "please open the spotify", "افتح سبوتيفاي", "افتح سبوتفاي"]) {
       const intent = matchSpotify(phrase);
@@ -85,6 +108,7 @@ describe("spotify intents", () => {
       "وش رايك في سبوتيفاي",
       "what time is it",
       "كم الساعة",
+      "Quota.",
     ]) {
       assert.equal(matchSpotify(phrase), null, phrase);
     }
