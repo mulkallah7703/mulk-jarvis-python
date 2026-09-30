@@ -150,15 +150,110 @@ export function spotifyTarget(intent: SpotifyIntent): SpotifyTarget {
   };
 }
 
-export function spotifyLine(raw: string, intent: SpotifyIntent): string {
-  if (hasArabic(raw)) {
-    if (intent.query) return `أدور لك على ${intent.query} في سبوتيفاي. لا تتأخر.`;
-    if (intent.kind === "play") return "حاضر. سبوتيفاي مفتوح. اختار شي فيه ذوق.";
-    return "فتحت سبوتيفاي. الباقي عليك.";
-  }
-  if (intent.query) return `Searching Spotify for ${intent.query}. Try not to skip the good part.`;
-  if (intent.kind === "play") return "Spotify's open. The taste is still on you.";
-  return "Spotify's open. Don't just stand there.";
+const OPEN_EN = [
+  "Spotify's open, so don't just stand there.",
+  "Spotify's up, and the taste is still your problem.",
+  "I opened Spotify already, so keep up.",
+  "Spotify's open, so pick something with a pulse.",
+  "Spotify's ready, so don't stare at the menu.",
+  "Opened Spotify, and the rest is on you.",
+  "Spotify's open, so impress me.",
+  "Fine, Spotify's open.",
+  "Spotify's up, so don't blame me for the playlist.",
+  "There, Spotify, before you even finished asking.",
+];
+
+const PLAY_EN = [
+  "Spotify's open, and the taste is still on you.",
+  "Music's waiting, so try not to pick noise.",
+  "Spotify's up, so find a song with some spine.",
+  "I opened Spotify, and the soundtrack is your mess.",
+  "There's the music, so don't make it boring.",
+  "Spotify's open on the hits, and the rest is taste.",
+  "Spotify's ready, so pick something I'd tolerate.",
+  "Music's on the screen, so don't freeze.",
+  "I opened it, so don't embarrass the speakers.",
+  "Playtime, and I'm judging quietly.",
+];
+
+const QUERY_EN = [
+  "Searching Spotify for {query}, so don't skip the good part.",
+  "{query} is up on Spotify, so don't waste it.",
+  "{query} is loading, so don't pretend this was hard.",
+  "I put {query} in Spotify, and the taste is noted.",
+  "Spotify's hunting {query}, and I'm already judging the pick.",
+  "{query} it is, and Spotify's open.",
+  "{query} is on Spotify, so try to look like you meant it.",
+  "{query}, there, so don't act surprised.",
+  "Spotify's on {query}, so impress me.",
+  "{query} is in the search, so keep up.",
+];
+
+const OPEN_AR = [
+  "فتحت سبوتيفاي، والذوق صار عليك.",
+  "سبوتيفاي قدامك، لا تضيع الوقت.",
+  "فتحتها، الحين ورّينا وش تسمع.",
+  "يلا، سبوتيفاي مفتوح.",
+  "فتحت سبوتيفاي قبل لا تكمل.",
+  "سبوتيفاي جاهز، الباقي عليك.",
+  "تم الفتح، لا تقعد تتفرج.",
+  "سبوتيفاي مفتوح، اختار شي يستاهل.",
+  "خلاص، سبوتيفاي عندك.",
+  "فتحتها، لا تقول بعدين ما لقيت.",
+];
+
+const PLAY_AR = [
+  "سبوتيفاي مفتوح، اختار شي فيه ذوق.",
+  "الموسيقى جاهزة، والاختيار عليك.",
+  "فتحت سبوتيفاي، لا تجيب أغاني مملة.",
+  "يلا نسمع، بس خلّها عدلة.",
+  "سبوتيفاي قدامك، دور أغنية تستاهل.",
+  "حاضر، الموسيقى هناك، لا تتفرج.",
+  "فتحتها، الحين ما لك عذر.",
+  "سبوتيفاي على الأشهر، والذوق عليك.",
+  "الموسيقى تنتظر، لا تتأخر.",
+  "يلا سبوتيفاي، وخل الذوق يكون حاضر.",
+];
+
+const QUERY_AR = [
+  "أدور {query}، لا تقول إنك ناسي الاسم.",
+  "{query} في سبوتيفاي، الحين.",
+  "فتحت سبوتيفاي على {query}.",
+  "طلبت {query}، وسبوتيفاي فتح عليها.",
+  "خلاص، {query} قدامك في سبوتيفاي.",
+  "أدور {query}، والذوق هذا عليك.",
+  "سبوتيفاي يفتح على {query}، والباقي ذوقك.",
+  "{query}، تم، دور عليها هناك.",
+  "حطيت {query} في بحث سبوتيفاي.",
+  "{query} جاهزة في سبوتيفاي.",
+];
+
+const lastSpotifyLine = new Map<string, number>();
+
+export function resetSpotifyLines(): void {
+  lastSpotifyLine.clear();
+}
+
+function poolFor(arabic: boolean, intent: SpotifyIntent): string[] {
+  if (intent.query) return arabic ? QUERY_AR : QUERY_EN;
+  if (intent.kind === "play") return arabic ? PLAY_AR : PLAY_EN;
+  return arabic ? OPEN_AR : OPEN_EN;
+}
+
+function fillQuery(template: string, query: string): string {
+  return template.replaceAll("{query}", query);
+}
+
+export function spotifyLine(raw: string, intent: SpotifyIntent, random: () => number = Math.random): string {
+  const arabic = hasArabic(raw);
+  const pool = poolFor(arabic, intent);
+  const key = `${arabic ? "ar" : "en"}:${intent.query ? "query" : intent.kind}`;
+  let index = Math.floor(random() * pool.length) % pool.length;
+  if (index < 0) index = 0;
+  const previous = lastSpotifyLine.get(key);
+  if (previous !== undefined && index === previous) index = (index + 1) % pool.length;
+  lastSpotifyLine.set(key, index);
+  return fillQuery(pool[index] ?? pool[0] ?? "", intent.query);
 }
 
 /**

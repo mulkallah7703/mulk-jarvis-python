@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import { matchSpotify, spotifyLine, spotifyTarget } from "./spotify.ts";
+import { matchSpotify, resetSpotifyLines, spotifyLine, spotifyTarget } from "./spotify.ts";
 
 describe("spotify intents", () => {
   it("matches the live transcripts that missed, including punctuation and a leading wake", () => {
@@ -77,25 +77,32 @@ describe("spotify intents", () => {
     assert.equal(spotifyTarget(duo).web, "https://open.spotify.com/search/Daft%20Punk");
   });
 
-  it("speaks a short confirmation in the command language", () => {
-    const open = matchSpotify("open spotify");
-    assert.ok(open);
-    assert.equal(spotifyLine("open spotify", open), "Spotify's open. Don't just stand there.");
-    const play = matchSpotify("play music");
-    assert.ok(play);
-    assert.equal(spotifyLine("play music", play), "Spotify's open. The taste is still on you.");
-    const query = matchSpotify("play Fairuz on spotify");
-    assert.ok(query);
-    assert.equal(spotifyLine("play Fairuz on spotify", query), "Searching Spotify for Fairuz. Try not to skip the good part.");
-    const arabic = matchSpotify("افتح سبوتيفاي");
-    assert.ok(arabic);
-    assert.equal(spotifyLine("افتح سبوتيفاي", arabic), "فتحت سبوتيفاي. الباقي عليك.");
-    const arabicPlay = matchSpotify("شغل موسيقى");
-    assert.ok(arabicPlay);
-    assert.equal(spotifyLine("شغل موسيقى", arabicPlay), "حاضر. سبوتيفاي مفتوح. اختار شي فيه ذوق.");
-    const arabicQuery = matchSpotify("شغل أغاني فيروز");
-    assert.ok(arabicQuery);
-    assert.equal(spotifyLine("شغل أغاني فيروز", arabicQuery), "أدور لك على فيروز في سبوتيفاي. لا تتأخر.");
+  it("rotates a short witty confirmation in the command language", () => {
+    const cases: { raw: string; query: string }[] = [
+      { raw: "open spotify", query: "" },
+      { raw: "play music", query: "" },
+      { raw: "play Fairuz on spotify", query: "Fairuz" },
+      { raw: "افتح سبوتيفاي", query: "" },
+      { raw: "شغل موسيقى", query: "" },
+      { raw: "شغل أغاني فيروز", query: "فيروز" },
+    ];
+    for (const item of cases) {
+      resetSpotifyLines();
+      const intent = matchSpotify(item.raw);
+      assert.ok(intent, item.raw);
+      const seen = new Set<string>();
+      let previous = "";
+      for (let index = 0; index < 24; index += 1) {
+        const line = spotifyLine(item.raw, intent, () => index / 24);
+        assert.equal(line.includes("."), true, line);
+        assert.equal((line.match(/[.!?؟]/g) || []).length, 1, line);
+        assert.notEqual(line, previous);
+        if (item.query) assert.equal(line.includes(item.query), true, line);
+        previous = line;
+        seen.add(line);
+      }
+      assert.ok(seen.size >= 8 && seen.size <= 10, `${item.raw} ${seen.size}`);
+    }
   });
 
   it("leaves ordinary sentences to Gemini", () => {
