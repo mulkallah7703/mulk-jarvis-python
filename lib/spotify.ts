@@ -118,7 +118,6 @@ export function spotifyLine(raw: string, intent: SpotifyIntent): string {
  * Ask the OS to open the Spotify app via a hidden frame, and open the web
  * player in a named tab. Returns false when the browser blocks window.open
  * (typical for a speech-recognition callback, which is not a user gesture).
- * If the app takes focus, the extra tab is closed.
  */
 export function launchSpotify(target: SpotifyTarget): boolean {
   if (typeof window === "undefined" || typeof document === "undefined") return false;
@@ -139,22 +138,13 @@ export function launchSpotify(target: SpotifyTarget): boolean {
   } catch {
     popup = null;
   }
-  if (!popup) return false;
+  // A blocked popup is null. Focusing the new tab also hides this page, so
+  // visibility is not proof that the desktop app opened — keep the web tab.
+  if (!popup || popup.closed) return false;
   try {
     popup.opener = null;
   } catch {
     /* already severed */
   }
-  const closeIfAppTookFocus = () => {
-    if (!document.hidden) return;
-    document.removeEventListener("visibilitychange", closeIfAppTookFocus);
-    try {
-      popup?.close();
-    } catch {
-      /* the tab may already be gone */
-    }
-  };
-  document.addEventListener("visibilitychange", closeIfAppTookFocus);
-  window.setTimeout(() => document.removeEventListener("visibilitychange", closeIfAppTookFocus), 2500);
   return true;
 }
