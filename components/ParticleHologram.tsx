@@ -134,7 +134,6 @@ export default function ParticleHologram({ mode = "idle", energy = 0 }: Props) {
     let builtKey = "";
     let backdrop: CanvasGradient | null = null;
     let backdropKey = "";
-    const starFill = new Map<number, string>();
     const mouse = { x: -9999, y: -9999 };
     const color = { r: 0, g: 0, b: 0 };
     let tintR = 120;
@@ -167,16 +166,6 @@ export default function ParticleHologram({ mode = "idle", energy = 0 }: Props) {
     const onLeave = () => {
       mouse.x = mouse.y = -9999;
     };
-
-    function starStyle(r: number, g: number, b: number): string {
-      const key = ((r & 0xf0) << 8) | ((g & 0xf0) << 4) | (b & 0xf0);
-      let style = starFill.get(key);
-      if (!style) {
-        style = `rgb(${r & 0xf0},${g & 0xf0},${b & 0xf0})`;
-        starFill.set(key, style);
-      }
-      return style;
-    }
 
     function paintBackdrop() {
       const key = `${W}:${H}:${oy}:${side}`;
@@ -431,21 +420,17 @@ export default function ParticleHologram({ mode = "idle", energy = 0 }: Props) {
           drawY += warpOut.y - homeY;
         }
 
-        if (kind === 4) {
-          const tw = 0.45 + 0.55 * (0.5 + 0.5 * Math.sin(ph * 1.7));
-          back.globalAlpha = tw * (forming ? 0.35 + 0.65 * intro : 1);
-          back.fillStyle = starStyle(color.r, color.g, color.b);
-          const sz = p.sz[i] || 1;
-          back.fillRect(drawX | 0, drawY | 0, sz, sz);
-          continue;
-        }
-
         let alpha = 255;
         let rr = color.r;
         let gg = color.g;
         let bb = color.b;
         let size = p.sz[i] || DOT;
-        if (kind === 2 || kind === 3) {
+        if (kind === 4) {
+          if (drawX > ox && drawX < portraitRight && drawY > oy && drawY < portraitBottom) continue;
+          const tw = 0.45 + 0.55 * (0.5 + 0.5 * Math.sin(ph * 1.7));
+          alpha = Math.min(255, 220 * tw * (forming ? 0.35 + 0.65 * intro : 1)) | 0;
+          size = p.sz[i] || 1;
+        } else if (kind === 2 || kind === 3) {
           const tw = 0.25 + 0.75 * (0.5 + 0.5 * Math.sin(ph * 2.1));
           alpha = Math.min(255, (kind === 3 ? 210 : 140) * tw) | 0;
           if (forming) alpha = (alpha * (0.35 + 0.65 * intro)) | 0;
