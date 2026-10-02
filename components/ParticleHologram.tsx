@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef } from "react";
+import { awakenAge, easeOutCubic, INTRO_MS, isIntroSkipped, PULSE_MS, rippleBand, tintFor, tintParticle } from "@/lib/presentation";
 import { noteWaveLevel, sampleSpeechLevel, waveOffsetAt } from "@/lib/speech-level";
 import type { OrbState } from "./orb-state";
 
@@ -26,6 +27,8 @@ type Particles = {
   ph: Float32Array;
   kind: Uint8Array;
   sz: Uint8Array;
+  sx: Float32Array;
+  sy: Float32Array;
 };
 
 type Props = {
@@ -61,6 +64,16 @@ export default function ParticleHologram({ mode = "idle", energy = 0 }: Props) {
     let imgH = 0;
     let builtKey = "";
     const mouse = { x: -9999, y: -9999 };
+    const color = { r: 0, g: 0, b: 0 };
+    let tintR = 120;
+    let tintG = 186;
+    let tintB = 255;
+    let tintAmt = 0;
+    let lastT = 0;
+    let chestX = 0;
+    let chestY = 0;
+    let span = 1;
+    const introT0 = performance.now();
     const reduced =
       typeof window !== "undefined" &&
       window.matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -107,6 +120,19 @@ export default function ParticleHologram({ mode = "idle", energy = 0 }: Props) {
       const p = particles;
       const st = modeRef.current;
       const energy = energyRef.current;
+      const dt = lastT ? Math.min(64, t - lastT) : 16;
+      lastT = t;
+      const target = tintFor(st);
+      const blend = 1 - Math.exp(-dt / 160);
+      tintAmt += (target.amount - tintAmt) * blend;
+      tintR += (target.r - tintR) * blend;
+      tintG += (target.g - tintG) * blend;
+      tintB += (target.b - tintB) * blend;
+      const intro = reduced || isIntroSkipped() ? 1 : easeOutCubic((t - introT0) / INTRO_MS);
+      const forming = intro < 1;
+      const age = awakenAge(t);
+      const pulsing = age >= 0 && age < PULSE_MS;
+      const pulseU = pulsing ? age / PULSE_MS : 0;
       const scanMul = st === "thinking" ? 2.4 : st === "speaking" ? 1.8 : 1;
       const jitterMul =
         (st === "listening" ? 1.35 : st === "thinking" ? 1.2 : 1) * (1 + energy * 0.8);
@@ -121,21 +147,28 @@ export default function ParticleHologram({ mode = "idle", energy = 0 }: Props) {
       noteWaveLevel(st, t, sampleSpeechLevel());
 
       for (let i = 0; i < N; i++) {
-        const dx = p.x[i] - mouse.x;
-        const dy = p.y[i] - mouse.y;
-        const d2 = dx * dx + dy * dy;
-        if (d2 < R2 && d2 > 0.01) {
-          const d = Math.sqrt(d2);
-          const f = ((1 - d / MOUSE_R) * MOUSE_F) / d;
-          p.vx[i] += dx * f;
-          p.vy[i] += dy * f;
+        if (forming) {
+          p.x[i] = p.sx[i] + (p.hx[i] - p.sx[i]) * intro;
+          p.y[i] = p.sy[i] + (p.hy[i] - p.sy[i]) * intro;
+          p.vx[i] = 0;
+          p.vy[i] = 0;
+        } else {
+          const dx = p.x[i] - mouse.x;
+          const dy = p.y[i] - mouse.y;
+          const d2 = dx * dx + dy * dy;
+          if (d2 < R2 && d2 > 0.01) {
+            const d = Math.sqrt(d2);
+            const f = ((1 - d / MOUSE_R) * MOUSE_F) / d;
+            p.vx[i] += dx * f;
+            p.vy[i] += dy * f;
+          }
+          p.vx[i] += (p.hx[i] - p.x[i]) * RETURN;
+          p.vy[i] += (p.hy[i] - p.y[i]) * RETURN;
+          p.vx[i] *= 0.82;
+          p.vy[i] *= 0.82;
+          p.x[i] += p.vx[i];
+          p.y[i] += p.vy[i];
         }
-        p.vx[i] += (p.hx[i] - p.x[i]) * RETURN;
-        p.vy[i] += (p.hy[i] - p.y[i]) * RETURN;
-        p.vx[i] *= 0.82;
-        p.vy[i] *= 0.82;
-        p.x[i] += p.vx[i];
-        p.y[i] += p.vy[i];
 
         const ph = p.ph[i] + t * 0.003;
         let jx = Math.sin(ph) * jitter;
@@ -144,18 +177,49 @@ export default function ParticleHologram({ mode = "idle", energy = 0 }: Props) {
           const amp = waveOffsetAt(p.hx[i] / W);
           jy += Math.sin(p.ph[i] * 1.7) * amp;
         }
+        let pulseGlow = 0;
+        if (pulsing) {
+          const rdx = p.hx[i] - chestX;
+          const rdy = p.hy[i] - chestY;
+          const dist = Math.hypot(rdx, rdy);
+          pulseGlow = rippleBand(dist, pulseU * span * 0.75, span * 0.045) * (1 - pulseU);
+          if (!reduced && dist > 1) {
+            const push = pulseGlow * 7;
+            jx += (rdx / dist) * push;
+            jy += (rdy / dist) * push;
+          }
+        }
         let a = 1.25 - shimmer * 0.5 + Math.sin(ph * 2.1) * shimmer * 0.5;
         const rel = p.hy[i] / H - scan;
         if (rel > -0.05 && rel < 0.05) a += 0.6 * (1 - Math.abs(rel) / 0.05);
         a *= flicker * ampMul;
-        if (a > 1.6) a = 1.6;
+        if (forming) a *= 0.35 + 0.65 * intro;
+        if (pulseGlow) a += pulseGlow * (reduced ? 0.55 : 1.35);
+        if (a > 2.2) a = 2.2;
+
+        const baseR = p.r[i] ?? 0;
+        const baseG = p.g[i] ?? 0;
+        const baseB = p.b[i] ?? 0;
+        if (tintAmt > 0.012) {
+          tintParticle(baseR, baseG, baseB, p.kind[i] ?? 0, tintR, tintG, tintB, tintAmt, color);
+        } else {
+          color.r = baseR;
+          color.g = baseG;
+          color.b = baseB;
+        }
+        if (pulsing && p.kind[i] === 3 && pulseU < 0.42) {
+          const flash = Math.sin(Math.min(1, pulseU / 0.16) * Math.PI);
+          color.r = Math.min(255, color.r + 210 * flash);
+          color.g = Math.min(255, color.g + 220 * flash);
+          color.b = Math.min(255, color.b + 255 * flash);
+        }
 
         plot(
           p.x[i] + jx,
           p.y[i] + jy,
-          Math.min(255, p.r[i] * a) | 0,
-          Math.min(255, p.g[i] * a) | 0,
-          Math.min(255, p.b[i] * a) | 0,
+          Math.min(255, color.r * a) | 0,
+          Math.min(255, color.g * a) | 0,
+          Math.min(255, color.b * a) | 0,
           p.sz[i] || DOT,
         );
       }
@@ -210,6 +274,9 @@ export default function ParticleHologram({ mode = "idle", energy = 0 }: Props) {
       H = bh;
       canvas.width = bw;
       canvas.height = bh;
+      chestX = ox + side * 0.5;
+      chestY = oy + side * 0.56;
+      span = side;
       const scale = side / imgW;
       const px: number[] = [];
       const py: number[] = [];
@@ -294,7 +361,10 @@ export default function ParticleHologram({ mode = "idle", energy = 0 }: Props) {
           pushWorld(wx, wy, r, g, b, 1, sz);
           return;
         }
-        pushWorld(ox + x * scale, oy + y * scale, r, g, b, 0, DOT);
+        const nx = x / imgW;
+        const eye = ny > 0.17 && ny < 0.31 && nx > 0.36 && nx < 0.64;
+        const head = ny < 0.42;
+        pushWorld(ox + x * scale, oy + y * scale, r, g, b, eye ? 3 : head ? 2 : 0, DOT);
       };
       const lumOf = (r: number, g: number, b: number) => 0.2126 * r + 0.7152 * g + 0.0722 * b;
       const isGold = (r: number, g: number, b: number) => r > 140 && g > 70 && b < 170 && r > b + 20;
@@ -396,11 +466,22 @@ export default function ParticleHologram({ mode = "idle", energy = 0 }: Props) {
       if (bw - (ox + side) > 8) extendStrip(1);
 
       N = px.length;
+      const formed = reduced || isIntroSkipped() || easeOutCubic((performance.now() - introT0) / INTRO_MS) >= 1;
+      const sx = new Float32Array(N);
+      const sy = new Float32Array(N);
+      const x = new Float32Array(N);
+      const y = new Float32Array(N);
+      for (let i = 0; i < N; i += 1) {
+        sx[i] = Math.random() * bw;
+        sy[i] = Math.random() * bh;
+        x[i] = formed ? (px[i] ?? 0) : (sx[i] ?? 0);
+        y[i] = formed ? (py[i] ?? 0) : (sy[i] ?? 0);
+      }
       particles = {
         hx: Float32Array.from(px),
         hy: Float32Array.from(py),
-        x: Float32Array.from(px),
-        y: Float32Array.from(py),
+        x,
+        y,
         vx: new Float32Array(N),
         vy: new Float32Array(N),
         r: Uint8Array.from(pr),
@@ -409,6 +490,8 @@ export default function ParticleHologram({ mode = "idle", energy = 0 }: Props) {
         ph: Float32Array.from(ph),
         kind: Uint8Array.from(pk),
         sz: Uint8Array.from(psz),
+        sx,
+        sy,
       };
       buf = gfx.createImageData(W, H);
       data32 = new Uint32Array(buf.data.buffer);

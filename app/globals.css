@@ -444,8 +444,157 @@ input:focus-visible {
   }
 }
 
+.title-rest {
+  opacity: 0;
+}
+
+.title-caret {
+  display: inline-block;
+  width: 0.55ch;
+  height: 0.9em;
+  margin-left: 2px;
+  vertical-align: -0.05em;
+  background: var(--cyan);
+  box-shadow: 0 0 8px var(--cyan);
+  animation: caret-blink 0.7s steps(1) infinite;
+}
+
+.title-glitch {
+  text-shadow:
+    2px 0 rgba(255, 90, 140, 0.75),
+    -2px 0 rgba(0, 229, 255, 0.85),
+    0 0 16px rgba(0, 229, 255, 0.9);
+  animation: title-glitch 120ms steps(2) 1;
+}
+
+.tagline {
+  opacity: 0;
+  transition: opacity 700ms ease;
+}
+
+.tagline-in {
+  opacity: 1;
+}
+
+.holo-hud {
+  position: fixed;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  display: grid;
+  place-items: center;
+  color: rgba(90, 176, 255, 0.72);
+  transition: color 400ms linear;
+}
+
+.holo-hud[data-tone="listening"] {
+  color: rgba(0, 229, 210, 0.78);
+}
+
+.holo-hud[data-tone="speaking"] {
+  color: rgba(232, 186, 96, 0.8);
+}
+
+.holo-rings {
+  width: min(78vmin, 860px);
+  height: min(78vmin, 860px);
+  overflow: visible;
+}
+
+.ring {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 0.45;
+  transform-box: fill-box;
+  transform-origin: center;
+}
+
+.ring-a {
+  stroke-dasharray: 18 12 4 16;
+  animation: holo-spin calc(26s * var(--rate, 1)) linear infinite;
+}
+
+.ring-b {
+  stroke-width: 0.3;
+  stroke-dasharray: 2 7;
+  animation: holo-spin calc(38s * var(--rate, 1)) linear infinite reverse;
+}
+
+.ring-c {
+  stroke-dasharray: 42 28 8 48;
+  animation: holo-spin calc(18s * var(--rate, 1)) linear infinite;
+}
+
+.ring-d {
+  stroke-width: 0.25;
+  stroke-dasharray: 1 10;
+  animation: holo-spin calc(46s * var(--rate, 1)) linear infinite reverse;
+}
+
+.holo-hud[data-speaking="true"] {
+  --rate: 0.36;
+}
+
+.holo-readouts {
+  position: absolute;
+  top: 16vh;
+  right: max(92px, calc(50vw - 44vmin));
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+  font-size: 11px;
+  letter-spacing: 0.16em;
+  opacity: 0.72;
+  text-shadow: 0 0 8px currentColor, 0 1px 2px rgba(0, 0, 0, 0.9);
+}
+
+@keyframes holo-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes caret-blink {
+  50% {
+    opacity: 0;
+  }
+}
+
+@keyframes title-glitch {
+  40% {
+    transform: translateX(1px);
+  }
+}
+
+@media (max-width: 720px) {
+  .holo-rings {
+    width: min(62vmin, 280px);
+    height: min(62vmin, 280px);
+  }
+
+  .holo-readouts {
+    top: auto;
+    right: 14px;
+    bottom: calc(128px + env(safe-area-inset-bottom));
+    font-size: 9px;
+    gap: 4px;
+    opacity: 0.62;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .jarvis-hologram-canvas {
     cursor: default;
+  }
+
+  .ring,
+  .title-caret,
+  .title-glitch {
+    animation: none;
+  }
+
+  .tagline {
+    transition: none;
   }
 }
