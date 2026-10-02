@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef } from "react";
+import { approach, faceLook, lookAngles, mouseLook, warpHome } from "@/lib/face-follow";
 import { awakenAge, easeOutCubic, INTRO_MS, isIntroSkipped, PULSE_MS, rippleBand, tintFor, tintParticle } from "@/lib/presentation";
 import { noteWaveLevel, sampleSpeechLevel, waveOffsetAt } from "@/lib/speech-level";
 import type { OrbState } from "./orb-state";
@@ -73,10 +74,15 @@ export default function ParticleHologram({ mode = "idle", energy = 0 }: Props) {
     let chestX = 0;
     let chestY = 0;
     let span = 1;
+    let lookX = 0;
+    let lookY = 0;
+    const warpOut = { x: 0, y: 0 };
     const introT0 = performance.now();
     const reduced =
       typeof window !== "undefined" &&
       window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const finePointer =
+      typeof window !== "undefined" && window.matchMedia("(pointer: fine)").matches;
 
     const img = new Image();
     img.decoding = "async";
@@ -145,6 +151,30 @@ export default function ParticleHologram({ mode = "idle", energy = 0 }: Props) {
       const jitter = reduced ? 0 : JITTER * jitterMul;
       const shimmer = SHIMMER * shimmerMul;
       noteWaveLevel(st, t, sampleSpeechLevel());
+      let targetX = 0;
+      let targetY = 0;
+      if (!reduced && !forming) {
+        if (faceLook.enabled) {
+          targetX = faceLook.x;
+          targetY = faceLook.y;
+        } else if (finePointer) {
+          const pointer = mouseLook(mouse.x, mouse.y, W, H);
+          targetX = pointer.x;
+          targetY = pointer.y;
+        }
+      }
+      lookX = approach(lookX, targetX, dt);
+      lookY = approach(lookY, targetY, dt);
+      const warping = !forming && !reduced && (Math.abs(lookX) > 0.004 || Math.abs(lookY) > 0.004);
+      let yawCos = 1;
+      let yawSin = 0;
+      let pitchSin = 0;
+      if (warping) {
+        const angles = lookAngles(lookX, lookY);
+        yawCos = angles.yawCos;
+        yawSin = angles.yawSin;
+        pitchSin = angles.pitchSin;
+      }
 
       for (let i = 0; i < N; i++) {
         if (forming) {
@@ -214,9 +244,18 @@ export default function ParticleHologram({ mode = "idle", energy = 0 }: Props) {
           color.b = Math.min(255, color.b + 255 * flash);
         }
 
+        let drawX = p.x[i] + jx;
+        let drawY = p.y[i] + jy;
+        if (warping) {
+          const homeX = p.hx[i] ?? 0;
+          const homeY = p.hy[i] ?? 0;
+          warpHome(homeX, homeY, p.kind[i] ?? 0, chestX, chestY, span, lookX, lookY, yawCos, yawSin, pitchSin, warpOut);
+          drawX += warpOut.x - homeX;
+          drawY += warpOut.y - homeY;
+        }
         plot(
-          p.x[i] + jx,
-          p.y[i] + jy,
+          drawX,
+          drawY,
           Math.min(255, color.r * a) | 0,
           Math.min(255, color.g * a) | 0,
           Math.min(255, color.b * a) | 0,
@@ -379,7 +418,7 @@ export default function ParticleHologram({ mode = "idle", energy = 0 }: Props) {
           hot ? 170 + Math.random() * 70 : 30 + Math.random() * 35,
           hot ? 200 + Math.random() * 40 : 80 + Math.random() * 50,
           200 + Math.random() * 55,
-          0,
+          4,
           hot ? 2 : 1,
         );
       }
