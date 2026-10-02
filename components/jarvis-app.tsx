@@ -2,8 +2,12 @@
 
 import { useEffect, useRef, useState, type FormEvent } from "react";
 
+import HologramHud from "@/components/HologramHud";
+import IntroTitle from "@/components/IntroTitle";
 import ParticleHologram from "@/components/ParticleHologram";
 import type { OrbState } from "@/components/orb-state";
+import { skipIntro, triggerAwaken } from "@/lib/presentation";
+import { armUiSounds, playReplyBlip, playWakeChime, setUiSoundsMuted, stopUiSounds } from "@/lib/ui-sounds";
 import {
   EMPTY_ANSWER,
   GREETING,
@@ -284,6 +288,7 @@ function speakBrowser(engine: Engine, text: string, generation: number): Promise
       finish();
       return;
     }
+    stopUiSounds();
     synth.resume();
     synth.speak(utterance);
   });
@@ -349,6 +354,7 @@ async function playClip(
   publish: () => void,
 ): Promise<void> {
   if (engine.generation !== generation) return;
+  stopUiSounds();
   const fallback = async () => {
     voice.name = "browser";
     rememberSpoken(engine, text);
@@ -379,6 +385,7 @@ async function playClip(
 async function speakText(engine: Engine, text: string, generation: number, publish: () => void): Promise<void> {
   const spoken = sanitizeSpeech(text);
   if (!spoken || engine.generation !== generation) return;
+  playReplyBlip();
   const abort = new AbortController();
   engine.ttsAbort = abort;
   const voice: { name: string | null } = { name: engine.ttsFailed ? "browser" : null };
@@ -413,6 +420,19 @@ export function JarvisApp() {
   const [chatOpen, setChatOpen] = useState(false);
   const [seenReplyId, setSeenReplyId] = useState(0);
   const api = useRef<Api | null>(null);
+
+  useEffect(() => {
+    const gesture = () => {
+      armUiSounds();
+      skipIntro();
+    };
+    window.addEventListener("pointerdown", gesture);
+    window.addEventListener("keydown", gesture);
+    return () => {
+      window.removeEventListener("pointerdown", gesture);
+      window.removeEventListener("keydown", gesture);
+    };
+  }, []);
 
   useEffect(() => {
     const engine = createEngine();
@@ -547,6 +567,8 @@ export function JarvisApp() {
         }
         engine.busy = true;
         pauseRec(engine);
+        playWakeChime();
+        triggerAwaken();
         pushLine(engine, "you", text);
         const spotify = matchSpotify(wake.remainder) ? wake.remainder : matchSpotify(text) ? text : "";
         const speaking = spotify ? startSpotify(spotify, engine.generation) : null;
@@ -630,6 +652,7 @@ export function JarvisApp() {
 
     const arm = async () => {
       primeWaveAudio();
+      armUiSounds();
       engine.muted = false;
       engine.needsTap = false;
       engine.notice = "";
@@ -685,6 +708,7 @@ export function JarvisApp() {
         engine.interim = "";
         engine.spotifyPrompt = null;
         engine.phase = "listening";
+        setUiSoundsMuted(false);
         publish();
         startRec(engine);
       },
@@ -693,6 +717,7 @@ export function JarvisApp() {
           engine.muted = false;
           engine.mode = "wake";
           engine.phase = "listening";
+          setUiSoundsMuted(false);
           publish();
           startRec(engine);
           return;
@@ -705,6 +730,7 @@ export function JarvisApp() {
         engine.muted = true;
         engine.interim = "";
         engine.phase = "muted";
+        setUiSoundsMuted(true);
         pauseRec(engine);
         publish();
       },
@@ -787,10 +813,10 @@ export function JarvisApp() {
   return (
     <main className="shell">
       <ParticleHologram mode={hologramMode(view)} energy={hologramEnergy(view)} />
+      <HologramHud phase={view.phase} mode={view.mode} />
       <aside className="brand-panel">
         <p className="eyebrow">Mulk Allah</p>
-        <h1>KORA</h1>
-        <p className="eyebrow">The AI That Has Attitude.</p>
+        <IntroTitle />
         <ul className="instructions">
           <li>Use Chrome or Edge and allow the mic.</li>
           <li>
@@ -985,6 +1011,7 @@ async function readAnswer(
     const lang = hasArabic(full) || hasArabic(spoken) ? "ar" : "en";
     const previous = context.slice(-300);
     const lock = queued > 0;
+    if (queued === 0) playReplyBlip();
     queued += 1;
     context = `${context} ${spoken}`.trim();
     const pendingClip = fetchClip(engine, spoken, generation, lang, previous, lock, speakAbort.signal);
