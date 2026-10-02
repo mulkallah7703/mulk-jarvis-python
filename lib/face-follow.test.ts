@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
+import { FACE_WORKER_SOURCE } from "./face-tracker.ts";
 import {
   CAMERA_FALLBACK,
   DETECT_WARMUP,
@@ -119,6 +120,14 @@ describe("face follow", () => {
     assert.equal(disabled, true);
     const fast = trackDetectCost(Array(SLOW_FRAME_LIMIT).fill(10), 12, 0);
     assert.equal(fast.disable, false);
+  });
+
+  it("loads the face model in a worker pinned to the same vision build", () => {
+    assert.match(FACE_WORKER_SOURCE, /@mediapipe\/tasks-vision@0\.10\.21\/\+esm/);
+    assert.match(FACE_WORKER_SOURCE, /tasks-vision@0\.10\.21\/wasm/);
+    assert.match(FACE_WORKER_SOURCE, /blaze_face_short_range\.tflite/);
+    assert.equal(FACE_WORKER_SOURCE.includes("getUserMedia"), false);
+    assert.equal(FACE_WORKER_SOURCE.includes("audio"), false);
   });
 
   it("requests the camera without a microphone", () => {
