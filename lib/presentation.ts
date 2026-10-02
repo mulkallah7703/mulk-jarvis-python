@@ -45,24 +45,6 @@ export function rippleBand(dist: number, radius: number, width: number): number 
   return Math.exp(-(d * d) / (w * w));
 }
 
-export function hudTone(phase: string, mode: string): "idle" | "listening" | "speaking" {
-  if (phase === "speaking") return "speaking";
-  if (phase === "listening" && mode === "session") return "listening";
-  return "idle";
-}
-
-export function hudStateLabel(phase: string, mode: string): string {
-  if (phase === "speaking") return "SPEAKING";
-  if (phase === "thinking") return "THINKING";
-  if (phase === "muted") return "MUTED";
-  if (phase === "listening" && mode === "session") return "LISTENING";
-  return "IDLE";
-}
-
-export function hudRingCount(width: number): number {
-  return width < 720 ? 2 : 4;
-}
-
 let introSkipped = false;
 const skipListeners = new Set<() => void>();
 

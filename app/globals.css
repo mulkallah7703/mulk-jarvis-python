@@ -476,85 +476,6 @@ input:focus-visible {
   opacity: 1;
 }
 
-.holo-hud {
-  position: fixed;
-  inset: 0;
-  z-index: 1;
-  pointer-events: none;
-  display: grid;
-  place-items: center;
-  color: rgba(90, 176, 255, 0.72);
-  transition: color 400ms linear;
-}
-
-.holo-hud[data-tone="listening"] {
-  color: rgba(0, 229, 210, 0.78);
-}
-
-.holo-hud[data-tone="speaking"] {
-  color: rgba(232, 186, 96, 0.8);
-}
-
-.holo-rings {
-  width: min(78vmin, 860px);
-  height: min(78vmin, 860px);
-  overflow: visible;
-}
-
-.ring {
-  fill: none;
-  stroke: currentColor;
-  stroke-width: 0.45;
-  transform-box: fill-box;
-  transform-origin: center;
-}
-
-.ring-a {
-  stroke-dasharray: 18 12 4 16;
-  animation: holo-spin calc(26s * var(--rate, 1)) linear infinite;
-}
-
-.ring-b {
-  stroke-width: 0.3;
-  stroke-dasharray: 2 7;
-  animation: holo-spin calc(38s * var(--rate, 1)) linear infinite reverse;
-}
-
-.ring-c {
-  stroke-dasharray: 42 28 8 48;
-  animation: holo-spin calc(18s * var(--rate, 1)) linear infinite;
-}
-
-.ring-d {
-  stroke-width: 0.25;
-  stroke-dasharray: 1 10;
-  animation: holo-spin calc(46s * var(--rate, 1)) linear infinite reverse;
-}
-
-.holo-hud[data-speaking="true"] {
-  --rate: 0.36;
-}
-
-.holo-readouts {
-  position: absolute;
-  top: 16vh;
-  right: max(92px, calc(50vw - 44vmin));
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
-  font-size: 11px;
-  letter-spacing: 0.16em;
-  opacity: 0.72;
-  text-shadow: 0 0 8px currentColor, 0 1px 2px rgba(0, 0, 0, 0.9);
-}
-
-@keyframes holo-spin {
-  to {
-    transform: rotate(360deg);
-  }
-}
-
 @keyframes caret-blink {
   50% {
     opacity: 0;
@@ -567,28 +488,11 @@ input:focus-visible {
   }
 }
 
-@media (max-width: 720px) {
-  .holo-rings {
-    width: min(62vmin, 280px);
-    height: min(62vmin, 280px);
-  }
-
-  .holo-readouts {
-    top: auto;
-    right: 14px;
-    bottom: calc(128px + env(safe-area-inset-bottom));
-    font-size: 9px;
-    gap: 4px;
-    opacity: 0.62;
-  }
-}
-
 @media (prefers-reduced-motion: reduce) {
   .jarvis-hologram-canvas {
     cursor: default;
   }
 
-  .ring,
   .title-caret,
   .title-glitch {
     animation: none;

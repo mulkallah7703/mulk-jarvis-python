@@ -7,9 +7,6 @@ import {
   TINT_MS,
   awakenAge,
   easeOutCubic,
-  hudRingCount,
-  hudStateLabel,
-  hudTone,
   isIntroSkipped,
   resetAwakenForTests,
   resetIntroForTests,
@@ -51,17 +48,6 @@ describe("presentation", () => {
     tintParticle(210, 150, 60, 0, listening.r, listening.g, listening.b, listening.amount, gold);
     assert.ok(gold.r > 180);
     assert.ok(gold.b < 100);
-  });
-
-  it("labels the hud and simplifies rings on a phone width", () => {
-    assert.equal(hudTone("speaking", "session"), "speaking");
-    assert.equal(hudTone("listening", "session"), "listening");
-    assert.equal(hudTone("listening", "wake"), "idle");
-    assert.equal(hudStateLabel("listening", "session"), "LISTENING");
-    assert.equal(hudStateLabel("speaking", "session"), "SPEAKING");
-    assert.equal(hudStateLabel("listening", "wake"), "IDLE");
-    assert.equal(hudRingCount(1440), 4);
-    assert.equal(hudRingCount(390), 2);
   });
 
   it("skips the intro once and starts a one second wake pulse", () => {
