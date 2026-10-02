@@ -123,7 +123,7 @@ describe("face follow", () => {
   });
 
   it("loads the face model in a worker pinned to the same vision build", () => {
-    assert.match(FACE_WORKER_SOURCE, /@mediapipe\/tasks-vision@0\.10\.21\/\+esm/);
+    assert.match(FACE_WORKER_SOURCE, /@mediapipe\/tasks-vision@0\.10\.21\/vision_bundle\.cjs/);
     assert.match(FACE_WORKER_SOURCE, /tasks-vision@0\.10\.21\/wasm/);
     assert.match(FACE_WORKER_SOURCE, /blaze_face_short_range\.tflite/);
     assert.equal(FACE_WORKER_SOURCE.includes("getUserMedia"), false);

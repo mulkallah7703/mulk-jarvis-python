@@ -16,23 +16,28 @@ const VISION_VERSION = "0.10.21";
 const WASM_BASE = `https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@${VISION_VERSION}/wasm`;
 const MODEL_URL =
   "https://storage.googleapis.com/mediapipe-models/face_detector/blaze_face_short_range/float16/1/blaze_face_short_range.tflite";
-const VISION_ESM = `https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@${VISION_VERSION}/+esm`;
+const VISION_CJS = `https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@${VISION_VERSION}/vision_bundle.cjs`;
 
 const FRAME_W = 320;
 const FRAME_H = 240;
 
 export const FACE_WORKER_SOURCE = `
-import { FaceDetector, FilesetResolver } from ${JSON.stringify(VISION_ESM)};
+self.exports = {};
+self.module = { exports: self.exports };
 const WASM = ${JSON.stringify(WASM_BASE)};
 const MODEL = ${JSON.stringify(MODEL_URL)};
+const LIB = ${JSON.stringify(VISION_CJS)};
 let detector = null;
 let lastTs = -1;
 self.onmessage = async (event) => {
   const msg = event.data;
   if (msg.type === "init") {
     try {
-      const fileset = await FilesetResolver.forVisionTasks(WASM);
-      detector = await FaceDetector.createFromOptions(fileset, {
+      const response = await fetch(LIB);
+      if (!response.ok) throw new Error("vision bundle " + response.status);
+      (0, eval)(await response.text());
+      const fileset = await self.exports.FilesetResolver.forVisionTasks(WASM);
+      detector = await self.exports.FaceDetector.createFromOptions(fileset, {
         baseOptions: { modelAssetPath: MODEL, delegate: "CPU" },
         runningMode: "VIDEO",
         minDetectionConfidence: 0.5,
@@ -133,7 +138,7 @@ export async function startFaceTracker(
   await video.play();
 
   const workerUrl = URL.createObjectURL(new Blob([FACE_WORKER_SOURCE], { type: "text/javascript" }));
-  const worker = new Worker(workerUrl, { type: "module" });
+  const worker = new Worker(workerUrl);
   const scratch = document.createElement("canvas");
   scratch.width = FRAME_W;
   scratch.height = FRAME_H;
