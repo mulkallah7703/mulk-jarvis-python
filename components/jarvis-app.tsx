@@ -2,7 +2,6 @@
 
 import { useEffect, useRef, useState, type FormEvent } from "react";
 
-import HologramHud from "@/components/HologramHud";
 import IntroTitle from "@/components/IntroTitle";
 import ParticleHologram from "@/components/ParticleHologram";
 import type { OrbState } from "@/components/orb-state";
@@ -813,7 +812,6 @@ export function JarvisApp() {
   return (
     <main className="shell">
       <ParticleHologram mode={hologramMode(view)} energy={hologramEnergy(view)} />
-      <HologramHud phase={view.phase} mode={view.mode} />
       <aside className="brand-panel">
         <p className="eyebrow">Mulk Allah</p>
         <IntroTitle />
