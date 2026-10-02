@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "@ai-sdk/google": "^4.0.77",
+    "@mediapipe/tasks-vision": "0.10.21",
     "ai": "^7.0.111",
     "next": "^16.3.6",
     "react": "^19.3.0",

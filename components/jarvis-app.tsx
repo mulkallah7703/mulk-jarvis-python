@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState, type FormEvent } from "react";
 
+import FaceFollow from "@/components/FaceFollow";
 import IntroTitle from "@/components/IntroTitle";
 import ParticleHologram from "@/components/ParticleHologram";
 import type { OrbState } from "@/components/orb-state";
@@ -916,6 +917,7 @@ export function JarvisApp() {
               >
                 {view.needsTap ? "Mic" : view.muted ? "Mic off" : "Mic"}
               </button>
+              <FaceFollow />
               <button type="button" aria-pressed={view.lang === "ar-SA"} onClick={() => api.current?.setLang("ar-SA")}>
                 العربية
               </button>
