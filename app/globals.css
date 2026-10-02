@@ -86,12 +86,6 @@ button {
   cursor: crosshair;
 }
 
-.jarvis-hologram-canvas.hologram-sparks {
-  pointer-events: none;
-  background: transparent;
-  cursor: none;
-}
-
 .hud {
   position: absolute;
   inset: 0;
