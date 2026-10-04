@@ -9,6 +9,7 @@ import {
   FACE_CAMERA_KEY,
   FACE_FOLLOW_KEY,
   FACE_HOLD_MS,
+  MAX_PITCH,
   MAX_YAW,
   SLOW_DETECT_MS,
   SLOW_FRAME_LIMIT,
@@ -17,11 +18,14 @@ import {
   clearFaceLook,
   faceFollowFailureMessage,
   faceLook,
+  headWeight,
   isLinkedCamera,
   lookAngles,
+  lookDeadZone,
   lookFromDetection,
   lookFromFace,
   mouseLook,
+  springStep,
   pickBuiltInCamera,
   readFaceCameraId,
   readFaceFollowEnabled,
@@ -147,42 +151,92 @@ describe("face follow", () => {
     assert.equal(CAMERA_FALLBACK.video, true);
   });
 
-  it("lerps and turns the head far enough to see", () => {
+  it("eases with a critically damped spring and a small mouse nudge", () => {
     const mid = approach(0, 1, 180);
     assert.ok(mid > 0.6 && mid < 0.7);
-    assert.ok(MAX_YAW > (20 * Math.PI) / 180);
-    assert.ok(MAX_YAW < (32 * Math.PI) / 180);
+    assert.ok(MAX_YAW >= (10 * Math.PI) / 180);
+    assert.ok(MAX_YAW <= (12 * Math.PI) / 180 + 1e-9);
+    assert.ok(MAX_PITCH >= (5 * Math.PI) / 180);
+    assert.ok(MAX_PITCH <= (7 * Math.PI) / 180);
+    const spring = { x: 0, v: 0 };
+    let peak = 0;
+    for (let i = 0; i < 90; i += 1) {
+      const next = springStep(spring, 1, 16);
+      if (next > peak) peak = next;
+    }
+    assert.ok(peak <= 1.001);
+    assert.ok(spring.x > 0.9);
+    assert.equal(lookDeadZone(0.02), 0);
+    assert.equal(lookDeadZone(1), 1);
+    const eased = lookDeadZone(0.5);
+    assert.ok(eased > 0.4 && eased < 0.5);
     const idle = mouseLook(-1, -1, 100, 100);
     assert.equal(idle.x, 0);
     const pointer = mouseLook(100, 50, 100, 100);
-    assert.ok(pointer.x > 0 && pointer.x < 0.5);
+    assert.ok(pointer.x > 0 && pointer.x < 0.2);
+    assert.ok(Math.abs(pointer.y) < 0.12);
   });
 
-  it("rotates the head toward the user and shifts the eyes a little further", () => {
+  it("turns only the head, compresses instead of stretching, and leads with the eyes", () => {
     const out = { x: 0, y: 0 };
     const chestX = 400;
     const chestY = 400;
     const span = 800;
-    const head = { x: 400, y: 220 };
-    warpHome(head.x, head.y, 2, chestX, chestY, span, 0, 0, 1, 0, 0, out);
-    assert.equal(out.x, head.x);
-    assert.equal(out.y, head.y);
-    const ang = lookAngles(1, 1);
-    warpHome(head.x, head.y, 2, chestX, chestY, span, 1, 1, ang.yawCos, ang.yawSin, ang.pitchSin, out);
-    const headX = out.x;
-    const headY = out.y;
-    assert.ok(headX > head.x);
-    assert.ok(headY > head.y);
-    warpHome(head.x, head.y, 3, chestX, chestY, span, 1, 1, ang.yawCos, ang.yawSin, ang.pitchSin, out);
-    assert.ok(out.x > headX);
-    assert.ok(out.y > headY);
-    warpHome(head.x, head.y, 4, chestX, chestY, span, 1, 0, ang.yawCos, ang.yawSin, 0, out);
-    const starShift = out.x - head.x;
-    const headShift = headX - head.x;
-    assert.ok(starShift > 0);
-    assert.ok(starShift < headShift);
-    warpHome(head.x, head.y, 1, chestX, chestY, span, 1, 0, ang.yawCos, ang.yawSin, 0, out);
-    assert.ok(out.x - head.x < headShift);
+    const ox = chestX - span * 0.5;
+    const oy = chestY - span * 0.56;
+    const at = (nx: number, ny: number) => ({ x: ox + nx * span, y: oy + ny * span });
+    const nose = at(0.49, 0.23);
+    const left = at(0.4, 0.24);
+    const right = at(0.58, 0.24);
+    const eye = at(0.46, 0.24);
+    const shoulder = at(0.28, 0.48);
+    const torso = at(0.5, 0.62);
+    const tie = at(0.5, 0.7);
+    assert.ok(headWeight(0.49, 0.23) > 0.95);
+    assert.ok(headWeight(0.49, 0.4) > 0.05);
+    assert.ok(headWeight(0.28, 0.48) < 0.1);
+    assert.equal(headWeight(0.5, 0.62), 0);
+    assert.equal(headWeight(0.49, 0.23, 4), 0);
+    assert.equal(headWeight(0.49, 0.23, 1), 0);
+
+    const rest = lookAngles(0, 0);
+    warpHome(nose.x, nose.y, 2, chestX, chestY, span, 0, 0, rest.yawCos, rest.yawSin, rest.pitchCos, rest.pitchSin, out);
+    assert.ok(Math.abs(out.x - nose.x) < 1e-6);
+    assert.ok(Math.abs(out.y - nose.y) < 1e-6);
+
+    const ang = lookAngles(1, 0);
+    warpHome(nose.x, nose.y, 2, chestX, chestY, span, 1, 0, ang.yawCos, ang.yawSin, ang.pitchCos, ang.pitchSin, out, 0.9);
+    const noseShift = out.x - nose.x;
+    assert.ok(noseShift > span * 0.01);
+    warpHome(left.x, left.y, 2, chestX, chestY, span, 1, 0, ang.yawCos, ang.yawSin, ang.pitchCos, ang.pitchSin, out, 0.7);
+    const leftX = out.x;
+    warpHome(right.x, right.y, 2, chestX, chestY, span, 1, 0, ang.yawCos, ang.yawSin, ang.pitchCos, ang.pitchSin, out, 0.7);
+    const rightX = out.x;
+    const turnedWidth = rightX - leftX;
+    const restWidth = right.x - left.x;
+    assert.ok(turnedWidth < restWidth);
+    assert.ok(turnedWidth > restWidth * 0.9);
+    warpHome(eye.x, eye.y, 2, chestX, chestY, span, 1, 0, ang.yawCos, ang.yawSin, ang.pitchCos, ang.pitchSin, out, 0.8);
+    const socketX = out.x;
+    warpHome(eye.x, eye.y, 3, chestX, chestY, span, 1, 0, ang.yawCos, ang.yawSin, ang.pitchCos, ang.pitchSin, out, 0.8);
+    assert.ok(out.x > socketX + span * 0.008);
+
+    const nod = lookAngles(0, 1);
+    warpHome(nose.x, nose.y, 2, chestX, chestY, span, 0, 1, nod.yawCos, nod.yawSin, nod.pitchCos, nod.pitchSin, out, 0.9);
+    assert.ok(out.y > nose.y);
+
+    warpHome(shoulder.x, shoulder.y, 0, chestX, chestY, span, 1, 1, ang.yawCos, ang.yawSin, ang.pitchCos, ang.pitchSin, out);
+    const shoulderShift = Math.hypot(out.x - shoulder.x, out.y - shoulder.y);
+    assert.ok(shoulderShift < Math.abs(noseShift) * 0.1);
+    warpHome(torso.x, torso.y, 0, chestX, chestY, span, 1, 1, ang.yawCos, ang.yawSin, ang.pitchCos, ang.pitchSin, out);
+    assert.ok(Math.abs(out.x - torso.x) < 1e-6);
+    assert.ok(Math.abs(out.y - torso.y) < 1e-6);
+    warpHome(tie.x, tie.y, 0, chestX, chestY, span, 1, 0, ang.yawCos, ang.yawSin, ang.pitchCos, ang.pitchSin, out);
+    assert.ok(Math.abs(out.x - tie.x) < 1e-6);
+    warpHome(nose.x, nose.y, 4, chestX, chestY, span, 1, 0, ang.yawCos, ang.yawSin, ang.pitchCos, ang.pitchSin, out);
+    assert.ok(Math.abs(out.x - nose.x) < 1e-6);
+    warpHome(nose.x, nose.y, 1, chestX, chestY, span, 1, 0, ang.yawCos, ang.yawSin, ang.pitchCos, ang.pitchSin, out);
+    assert.ok(Math.abs(out.x - nose.x) < 1e-6);
   });
 
   it("remembers a built-in camera and skips a linked phone", () => {

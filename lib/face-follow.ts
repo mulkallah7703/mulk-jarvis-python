@@ -9,8 +9,12 @@ export const SLOW_FRAME_LIMIT = 8;
 export const DETECT_WARMUP = 3;
 export const FACE_HOLD_MS = 350;
 export const LOOK_TAU_MS = 180;
-export const MAX_YAW = (26 * Math.PI) / 180;
-export const MAX_PITCH = (10 * Math.PI) / 180;
+export const MAX_YAW = (12 * Math.PI) / 180;
+export const MAX_PITCH = (6 * Math.PI) / 180;
+/** Critically damped look spring, rad/s. Settles in about a fifth of a second. */
+export const LOOK_OMEGA = 16;
+/** Look units inside this band ease to center instead of twitching. */
+export const LOOK_DEADZONE = 0.03;
 
 export type Look = { x: number; y: number };
 
@@ -220,19 +224,60 @@ export function approach(current: number, target: number, dt: number, tau = LOOK
   return current + (target - current) * step;
 }
 
-/** Subtle desktop pointer parallax used only while the camera is off. */
+export type SpringState = { x: number; v: number };
+
+/** Continuous dead zone. Values inside `zone` become 0; 1 stays 1. */
+export function lookDeadZone(value: number, zone = LOOK_DEADZONE): number {
+  const mag = Math.abs(value);
+  if (!(mag > zone) || Number.isNaN(value)) return 0;
+  const scaled = (mag - zone) / (1 - zone);
+  const clamped = scaled > 1 ? 1 : scaled;
+  return value > 0 ? clamped : -clamped;
+}
+
+/**
+ * Exact critically damped step toward `target` (ζ = 1). No overshoot from rest,
+ * stable at uneven frame times.
+ */
+export function springStep(state: SpringState, target: number, dtMs: number, omega = LOOK_OMEGA): number {
+  const t = Math.min(0.05, Math.max(0, dtMs) / 1000);
+  const u0 = state.x - target;
+  if (t === 0) return state.x;
+  if (Math.abs(u0) < 1e-4 && Math.abs(state.v) < 1e-3) {
+    state.x = target;
+    state.v = 0;
+    return target;
+  }
+  const decay = Math.exp(-omega * t);
+  const b = state.v + omega * u0;
+  state.v = (state.v - omega * b * t) * decay;
+  state.x = target + (u0 + b * t) * decay;
+  return state.x;
+}
+
+/** Tiny pointer nudge while the camera is off. Same head turn, much smaller. */
 export function mouseLook(mx: number, my: number, width: number, height: number): Look {
   if (width < 2 || height < 2 || mx < 0 || my < 0) return { x: 0, y: 0 };
   return {
-    x: clampLook((mx / width - 0.5) * 2) * 0.35,
-    y: clampLook((my / height - 0.5) * 2) * 0.22,
+    x: clampLook((mx / width - 0.5) * 2) * 0.14,
+    y: clampLook((my / height - 0.5) * 2) * 0.08,
   };
 }
 
-export function lookAngles(followX: number, followY: number): { yawCos: number; yawSin: number; pitchSin: number } {
+export function lookAngles(followX: number, followY: number): {
+  yawCos: number;
+  yawSin: number;
+  pitchCos: number;
+  pitchSin: number;
+} {
   const yaw = followX * MAX_YAW;
   const pitch = followY * MAX_PITCH;
-  return { yawCos: Math.cos(yaw), yawSin: Math.sin(yaw), pitchSin: Math.sin(pitch) };
+  return {
+    yawCos: Math.cos(yaw),
+    yawSin: Math.sin(yaw),
+    pitchCos: Math.cos(pitch),
+    pitchSin: Math.sin(pitch),
+  };
 }
 
 export function cameraConstraints(): { audio: false; video: MediaTrackConstraints } {
@@ -249,9 +294,56 @@ export function cameraConstraints(): { audio: false; video: MediaTrackConstraint
 
 export const CAMERA_FALLBACK: { audio: false; video: true } = { audio: false, video: true };
 
+/** Portrait-square location of the face, the neck pivot, and the head ellipsoid. */
+export const HEAD_NX = 0.49;
+export const HEAD_NY = 0.23;
+export const NECK_NY = 0.39;
+const HEAD_RX = 0.145;
+const HEAD_RY = 0.155;
+const EYE_SHIFT_X = 0.012;
+const EYE_SHIFT_Y = 0.007;
+const EYE_Y = 0.245;
+const EYE_LEFT = 0.43;
+const EYE_RIGHT = 0.53;
+
+function smooth01(value: number): number {
+  const t = value <= 0 ? 0 : value >= 1 ? 1 : value;
+  return t * t * (3 - 2 * t);
+}
+
+function smoothFalloff(dist: number, inner: number, outer: number): number {
+  if (dist <= inner) return 1;
+  if (dist >= outer) return 0;
+  return 1 - smooth01((dist - inner) / (outer - inner));
+}
+
 /**
- * Parallax warp of one home position. Stars stay shallow. Eyes pick up an extra shift.
- * `out` is reused by the frame loop so this allocates nothing.
+ * 1 on the face and hair, easing off through the neck, 0 on the shoulders and torso.
+ * Wave sparks and background stars never turn.
+ */
+export function headWeight(nx: number, ny: number, kind = 2): number {
+  if (kind === 1 || kind === 4) return 0;
+  const ellipse = Math.hypot((nx - HEAD_NX) / HEAD_RX, (ny - HEAD_NY) / HEAD_RY);
+  let weight = smoothFalloff(ellipse, 0.7, 1.45);
+  if (ny > 0.33) weight *= smoothFalloff(ny, 0.33, 0.45);
+  return weight;
+}
+
+/** Soft mask over the two eyes so a gaze offset does not tear the cheeks. */
+export function eyeGaze(nx: number, ny: number): number {
+  const vertical = smoothFalloff(Math.abs(ny - EYE_Y), 0.018, 0.06);
+  if (vertical <= 0) return 0;
+  const spread = 0.0032;
+  const left = Math.exp(-((nx - EYE_LEFT) * (nx - EYE_LEFT)) / spread);
+  const right = Math.exp(-((nx - EYE_RIGHT) * (nx - EYE_RIGHT)) / spread);
+  const lobe = left > right ? left : right;
+  return vertical * lobe;
+}
+
+/**
+ * Head-only yaw/pitch. Depth comes from a head ellipsoid, nudged by luminance so
+ * bright features sit forward. Perspective is applied as a delta from the rest
+ * pose, so a centered look does not resize the figure. `out` is reused by the frame loop.
  */
 export function warpHome(
   hx: number,
@@ -264,31 +356,58 @@ export function warpHome(
   followY: number,
   yawCos: number,
   yawSin: number,
+  pitchCos: number,
   pitchSin: number,
   out: { x: number; y: number },
+  lum = 0.55,
 ): void {
-  if (kind === 4) {
-    out.x = hx + followX * span * 0.012;
-    out.y = hy + followY * span * 0.008;
+  if (span < 2 || kind === 1 || kind === 4) {
+    out.x = hx;
+    out.y = hy;
     return;
   }
-  const dx = hx - chestX;
-  const dy = hy - chestY;
-  let depth = 0.5;
-  if (kind === 1) depth = 0.22;
-  else if (kind === 3) depth = 1;
-  else if (kind === 2) depth = 0.82;
-  else {
-    const dist = Math.hypot(dx, dy);
-    depth = 0.42 + 0.38 * (1 - Math.min(1, dist / Math.max(1, span)));
+  const ox = chestX - span * 0.5;
+  const oy = chestY - span * 0.56;
+  const nx = (hx - ox) / span;
+  const ny = (hy - oy) / span;
+  const weight = headWeight(nx, ny, kind);
+  if (weight < 0.004) {
+    out.x = hx;
+    out.y = hy;
+    return;
   }
-  out.x = chestX + dx * yawCos - dy * yawSin * depth;
-  out.y = hy + pitchSin * depth * span * 0.16 + dx * yawSin * depth * 0.08;
-  if (kind === 2) {
-    out.x += followX * span * 0.055;
-    out.y += followY * span * 0.03;
-  } else if (kind === 3) {
-    out.x += followX * span * 0.09;
-    out.y += followY * span * 0.045;
+
+  const pivotX = ox + span * HEAD_NX;
+  const pivotY = oy + span * NECK_NY;
+  const x = hx - pivotX;
+  const y = pivotY - hy;
+  const rx = span * 0.12;
+  const ry = span * 0.145;
+  const ex = (hx - (ox + span * HEAD_NX)) / rx;
+  const ey = ((oy + span * HEAD_NY) - hy) / ry;
+  const radial = ex * ex + ey * ey;
+  const bulge = radial < 1 ? Math.sqrt(1 - radial) : 0;
+  const lumT = lum < 0 ? 0 : lum > 1 ? 1 : lum;
+  const z = span * 0.1 * bulge * (0.75 + 0.45 * lumT);
+
+  const x1 = x * yawCos + z * yawSin;
+  const z1 = -x * yawSin + z * yawCos;
+  const y2 = y * pitchCos - z1 * pitchSin;
+  const z2 = -y * pitchSin + z1 * pitchCos;
+
+  const focal = span * 3.2;
+  const safe = span * 0.45;
+  const restDen = focal - z > safe ? focal - z : safe;
+  const rotDen = focal - z2 > safe ? focal - z2 : safe;
+  const restPersp = focal / restDen;
+  const rotPersp = focal / rotDen;
+  let dx = (x1 * rotPersp - x * restPersp) * weight;
+  let dy = ((y2 * rotPersp - y * restPersp) * weight);
+  if (kind === 3) {
+    const gaze = eyeGaze(nx, ny);
+    dx += followX * span * EYE_SHIFT_X * weight * gaze;
+    dy -= followY * span * EYE_SHIFT_Y * weight * gaze;
   }
+  out.x = hx + dx;
+  out.y = hy - dy;
 }
