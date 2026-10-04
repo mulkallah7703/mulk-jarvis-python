@@ -9,8 +9,8 @@ export const SLOW_FRAME_LIMIT = 8;
 export const DETECT_WARMUP = 3;
 export const FACE_HOLD_MS = 350;
 export const LOOK_TAU_MS = 180;
-export const MAX_YAW = (18 * Math.PI) / 180;
-export const MAX_PITCH = (8 * Math.PI) / 180;
+export const MAX_YAW = (26 * Math.PI) / 180;
+export const MAX_PITCH = (10 * Math.PI) / 180;
 
 export type Look = { x: number; y: number };
 
@@ -284,8 +284,11 @@ export function warpHome(
   }
   out.x = chestX + dx * yawCos - dy * yawSin * depth;
   out.y = hy + pitchSin * depth * span * 0.16 + dx * yawSin * depth * 0.08;
-  if (kind === 3) {
-    out.x += followX * span * 0.034;
-    out.y += followY * span * 0.018;
+  if (kind === 2) {
+    out.x += followX * span * 0.055;
+    out.y += followY * span * 0.03;
+  } else if (kind === 3) {
+    out.x += followX * span * 0.09;
+    out.y += followY * span * 0.045;
   }
 }

@@ -150,8 +150,8 @@ describe("face follow", () => {
   it("lerps and turns the head far enough to see", () => {
     const mid = approach(0, 1, 180);
     assert.ok(mid > 0.6 && mid < 0.7);
-    assert.ok(MAX_YAW > (14 * Math.PI) / 180);
-    assert.ok(MAX_YAW < (22 * Math.PI) / 180);
+    assert.ok(MAX_YAW > (20 * Math.PI) / 180);
+    assert.ok(MAX_YAW < (32 * Math.PI) / 180);
     const idle = mouseLook(-1, -1, 100, 100);
     assert.equal(idle.x, 0);
     const pointer = mouseLook(100, 50, 100, 100);
