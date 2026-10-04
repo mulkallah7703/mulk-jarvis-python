@@ -1,18 +1,21 @@
 import { createGoogle } from "@ai-sdk/google";
 import { streamText, type ModelMessage } from "ai";
 
-import { EMPTY_ANSWER, speakableError } from "@/lib/text";
+import { geminiErrorStatus, isQuotaError, isTemperatureRejection } from "@/lib/gemini-models";
+import { EMPTY_ANSWER, quotaPhrase, speakableError } from "@/lib/text";
 import {
   MISSING_KEY,
-  systemPrompt,
+  chatLang,
   geminiApiKey,
-  geminiModelChain,
   isGeminiAuthError,
   logChatModelFailure,
   logJarvisError,
   parseMessages,
+  recentReplies,
   shouldFallbackModel,
+  systemPrompt,
   thinkingConfig,
+  voiceModelChain,
 } from "@/lib/server/settings";
 
 export const dynamic = "force-dynamic";
@@ -38,6 +41,8 @@ export async function POST(req: Request) {
   }
   const messages = parseMessages(body);
   if (!messages) return plain("Send at least one user message.", 400);
+  const lang = chatLang(body);
+  const lastUser = [...messages].reverse().find((message) => message.role === "user")?.content || "";
 
   const apiKey = geminiApiKey();
   if (!apiKey) return plain(MISSING_KEY);
@@ -47,6 +52,7 @@ export async function POST(req: Request) {
     role: message.role,
     content: message.content,
   }));
+  const system = systemPrompt(new Date(), { replies: recentReplies(messages), lang });
   const encoder = new TextEncoder();
 
   const stream = new ReadableStream<Uint8Array>({
@@ -64,55 +70,78 @@ export async function POST(req: Request) {
       let lastError: unknown;
       let stop = false;
       try {
-        for (const modelName of geminiModelChain()) {
+        for (const modelName of voiceModelChain()) {
           if (yielded || req.signal.aborted || stop) break;
-          const thinking = thinkingConfig(modelName);
-          const variants = thinking ? [thinking, undefined] : [undefined];
+          let temperature: number | undefined = 0.8;
+          let variant = thinkingConfig(modelName);
+          let strippedTemp = false;
+          let strippedThinking = false;
           let advance = false;
-          for (const variant of variants) {
-            if (yielded || req.signal.aborted || stop) break;
+          while (!yielded && !req.signal.aborted && !stop) {
             try {
+              let announced = false;
               const result = streamText({
                 model: google(modelName),
-                system: systemPrompt(),
+                system,
                 messages: modelMessages,
-                maxOutputTokens: 400,
+                maxOutputTokens: 280,
                 maxRetries: 0,
                 abortSignal: req.signal,
-                ...(modelName.toLowerCase().includes("gemini-3") ? {} : { temperature: 0.4 }),
+                ...(temperature === undefined ? {} : { temperature }),
                 ...(variant ? { providerOptions: { google: { thinkingConfig: variant } } } : {}),
               });
               for await (const part of result.fullStream) {
                 if (part.type === "text-delta") {
                   if (!part.text) continue;
+                  if (!announced) {
+                    announced = true;
+                    console.info(`[jarvis] chat: model=${modelName}`);
+                  }
                   yielded = true;
                   send(part.text);
                 } else if (part.type === "error") {
-                  const failure = part.error instanceof Error ? part.error : new Error("Gemini request failed");
-                  throw failure;
+                  throw part.error instanceof Error ? part.error : new Error("Gemini request failed");
                 } else if (part.type === "abort") {
                   break;
                 }
               }
               if (yielded) break;
+              if (variant && !strippedThinking) {
+                variant = undefined;
+                strippedThinking = true;
+                continue;
+              }
+              break;
             } catch (error) {
               lastError = error;
               if (yielded || req.signal.aborted) break;
               logChatModelFailure(modelName, error);
-              if (isGeminiAuthError(error)) {
+              if (isQuotaError(error) || isGeminiAuthError(error)) {
                 stop = true;
                 break;
+              }
+              if (temperature !== undefined && !strippedTemp && isTemperatureRejection(error)) {
+                temperature = undefined;
+                strippedTemp = true;
+                continue;
+              }
+              if (variant && !strippedThinking && geminiErrorStatus(error) === 400) {
+                variant = undefined;
+                strippedThinking = true;
+                continue;
               }
               if (shouldFallbackModel(error)) {
                 advance = true;
                 break;
               }
+              break;
             }
           }
           if (!advance) break;
         }
         if (!yielded && !req.signal.aborted) {
-          send(lastError ? speakableError(lastError) : EMPTY_ANSWER);
+          if (lastError && isQuotaError(lastError)) send(quotaPhrase(lang, lastUser));
+          else send(lastError ? speakableError(lastError) : EMPTY_ANSWER);
         }
       } catch (error) {
         if (!req.signal.aborted && !yielded) {

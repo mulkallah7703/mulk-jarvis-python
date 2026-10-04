@@ -1,5 +1,9 @@
-import { MISSING_KEY } from "../text";
-import { geminiModelChain as modelChain, logChatModelFailure as logModelFailure } from "../gemini-models";
+import { HISTORY_MESSAGES, MISSING_KEY } from "../text.ts";
+import {
+  geminiModelChain as modelChain,
+  logChatModelFailure as logModelFailure,
+  voiceModelChain as voiceChain,
+} from "../gemini-models.ts";
 
 export {
   DEFAULT_GEMINI_FALLBACK_MODELS,
@@ -7,13 +11,13 @@ export {
   isGeminiAuthError,
   shouldFallbackModel,
   thinkingConfig,
-} from "../gemini-models";
+} from "../gemini-models.ts";
 
 export const SYSTEM_PROMPT = `You are KORA for Mulk Allah Alsadi: an insanely capable voice AI with attitude. Your name is KORA (كورا). Never call yourself Jarvis, JARVIS, or جارفيس. Arabic: مساعدك الذكي، بس عنده شخصية. KORA is male. In Arabic, refer to yourself only with masculine forms (أنا جاهز، قلت، أقدر، عندي). Never feminine self-reference such as جاهزة، قلتِ، or feminine verb endings. Sharp, fast, confident, dry, sarcastic, playfully arrogant, witty, loyal. Never corporate, generic, motivational, or an encyclopedia.
 
-Voice first. Simple requests: 1 to 3 short spoken sentences. Longer only if he asks for detail, steps, a list, or an explanation. No markdown, bullets, asterisks, or emojis. No intro. Do not repeat the question.
+Voice first. Simple requests: 1 to 3 short spoken sentences. Longer only if he asks for detail, steps, a list, or an explanation. No markdown, bullets, asterisks, or emojis. No intro. Do not repeat the question. Never give the same reply twice. If he asks again, answer from a different angle.
 
-Reply in the language of his latest message. English in, English out. Arabic in, Arabic out. Do not switch. Arabic is natural Saudi/Gulf talk, native humor, light slang, not a translated joke and not a joke every line. Mixed speech stays mixed.
+Reply in the language of his latest message. English in, English out. Arabic in, Arabic out. Do not switch. Arabic is natural Saudi/Gulf talk, native humor, light slang, not a translated joke and not a joke every line. Mixed speech stays mixed. When the latest message is Arabic, talk like a Gulf man: وش، ايش، الحين، أبي، أبغى، مو، زين. Masculine only. Not formal MSA, and not Egyptian.
 
 He is the operator. Rarely say sir, boss, chief, or طال عمرك / يا ريس. Use his name only when natural. A leading Kora, كورا, or hey Kora is the wake word, not part of the question.
 
@@ -29,7 +33,27 @@ Order: correct, useful, fast, natural, then personality. Drop the joke if it slo
 A private clock line follows for your own use. Never mention the date, the time, the day, the timezone, or the location unless he explicitly asks for the time, the date, or where he is. Do not append a clock, a date, or Asia/Riyadh to any other answer. Do not quote the clock line.
 `;
 
-export function systemPrompt(now = new Date()): string {
+export type ChatMessage = {
+  role: "user" | "assistant";
+  content: string;
+};
+
+export function recentReplies(messages: ChatMessage[]): string[] {
+  const replies: string[] = [];
+  for (const message of messages) {
+    if (message.role === "assistant") replies.push(message.content.replace(/\s+/g, " ").trim().slice(0, 180));
+  }
+  return replies.filter(Boolean).slice(-4);
+}
+
+function languageLine(lang: string): string {
+  if (lang === "mixed") return "He just mixed Gulf Arabic and English. Answer mixed the same way. Keep the Arabic in Gulf dialect.";
+  if (lang === "ar" || lang.startsWith("ar")) return "He just spoke Gulf Arabic. Answer in Gulf Arabic even if the transcript is romanized.";
+  if (lang === "en" || lang.startsWith("en")) return "He just spoke English. Answer in English.";
+  return "";
+}
+
+export function systemPrompt(now = new Date(), extra?: { replies?: string[]; lang?: string }): string {
   const clock = new Intl.DateTimeFormat("en-GB", {
     timeZone: "Asia/Riyadh",
     weekday: "short",
@@ -39,17 +63,16 @@ export function systemPrompt(now = new Date()): string {
     minute: "2-digit",
     hourCycle: "h23",
   }).format(now);
-  return `${SYSTEM_PROMPT}Clock: ${clock} Asia/Riyadh.`;
+  const replies = (extra?.replies || []).map((reply) => reply.replace(/\s+/g, " ").trim()).filter(Boolean).slice(-4);
+  const avoid = replies.length
+    ? `Do not reuse this wording: ${replies.join(" || ")}`
+    : "Do not reuse the wording of an earlier reply in this conversation.";
+  return [SYSTEM_PROMPT, languageLine(extra?.lang || ""), avoid, `Clock: ${clock} Asia/Riyadh.`].filter(Boolean).join("\n");
 }
 
-export const HISTORY_MESSAGES = 12;
+export { HISTORY_MESSAGES };
 
 export type WebTts = "browser" | "gemini" | "elevenlabs";
-
-export type ChatMessage = {
-  role: "user" | "assistant";
-  content: string;
-};
 
 export function geminiApiKey(): string {
   return (process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY || "").trim();
@@ -61,6 +84,25 @@ export function geminiModel(): string {
 
 export function geminiModelChain(): string[] {
   return modelChain(geminiModel(), process.env.GEMINI_FALLBACK_MODELS);
+}
+
+export function voiceModelChain(): string[] {
+  return voiceChain(geminiModel(), process.env.GEMINI_FALLBACK_MODELS);
+}
+
+export type SttProvider = "scribe" | "browser";
+
+export function sttProvider(): SttProvider {
+  return (process.env.ELEVENLABS_API_KEY || "").trim() ? "scribe" : "browser";
+}
+
+export function chatLang(body: unknown): string {
+  if (!body || typeof body !== "object") return "";
+  const raw = (body as { lang?: unknown }).lang;
+  if (typeof raw !== "string") return "";
+  const lang = raw.trim().toLowerCase().slice(0, 16);
+  if (!/^[a-z][a-z-]{0,15}$/.test(lang)) return "";
+  return lang;
 }
 
 export function geminiTtsModel(): string {
