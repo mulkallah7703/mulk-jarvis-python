@@ -87,7 +87,7 @@ The Python CLI needs a microphone process, faster-whisper, and edge-tts. That ca
 2. It says **Hi Mulk Allah!** and opens a session.
 3. Each spoken question is answered out loud. You do not say the wake word again.
 4. **Mute** or **Stop** (or **stop jarvis**, **goodbye**, **توقف**) returns to waiting for the wake word.
-5. Arabic and English. The **العربية / English** control is the browser speech-recognition language. Chrome and Edge are the ones that implement it. You can also type.
+5. Arabic, English, or a mix in one sentence. With an ElevenLabs key, each utterance goes to Scribe and the language is detected per phrase. The **العربية / English** buttons only set the browser recognizer, which is the fallback when Scribe is unavailable. You can also type.
 
 Set the Vercel project to **Next.js** with the root directory `.` (this is already in `vercel.json`). Build command: `npm run build`.
 
@@ -97,11 +97,11 @@ Environment variables for the web app:
 | --- | --- | --- |
 | `GEMINI_API_KEY` or `GOOGLE_API_KEY` | yes, to answer | Same key as the CLI. Without it, the wake greeting still works. |
 | `GEMINI_MODEL` | no | Default `gemini-2.5-flash`. Production uses `gemini-3.6-flash`. |
-| `GEMINI_FALLBACK_MODELS` | no | Comma-separated flash models tried after `GEMINI_MODEL` when that model returns quota (429), 404, or 5xx. Default `gemini-3.1-flash-lite,gemini-3.5-flash-lite`. Blank disables the fallback. |
+| `GEMINI_FALLBACK_MODELS` | no | Comma-separated models tried after `GEMINI_MODEL` on 404 or 5xx. The voice path skips lite models. Quota and rate limits are spoken back instead of switching models. Default list is `gemini-3.1-flash-lite,gemini-3.5-flash-lite`. |
 | `TTS_PROVIDER` | no | `browser`, `gemini`, or `elevenlabs`. The CLI value `edge` cannot run here. An ElevenLabs key is tried first; this chooses the fallback. |
 | `GEMINI_TTS_MODEL` | no | Default `gemini-2.5-flash-preview-tts`. |
 | `GEMINI_TTS_VOICE` | no | Default `Charon`. |
-| `ELEVENLABS_API_KEY` | no | When set, `/api/tts` speaks with ElevenLabs first for Arabic and English. | 
+| `ELEVENLABS_API_KEY` | no | When set, `/api/tts` speaks with ElevenLabs first, and `/api/stt` transcribes with Scribe v2. Scribe is billed by audio duration. | 
 | `ELEVENLABS_VOICE_ID` | no | Defaults to `ER6QMHaBjLyek2P4dKLO`. A missing voice falls back to `rPNcQ53R703tTmtue1AT`. |
 | `ELEVENLABS_MODEL` | no | Defaults to `eleven_flash_v2_5`. `ELEVENLABS_MODEL_ID` is still accepted. |
 

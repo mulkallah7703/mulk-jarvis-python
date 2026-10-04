@@ -1,4 +1,4 @@
-import { geminiApiKey, geminiModel, resolveWebTts } from "@/lib/server/settings";
+import { geminiApiKey, geminiModel, resolveWebTts, sttProvider } from "@/lib/server/settings";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -9,6 +9,7 @@ export function GET() {
       hasGeminiKey: Boolean(geminiApiKey()),
       model: geminiModel(),
       tts: resolveWebTts(),
+      stt: sttProvider(),
     },
     { headers: { "Cache-Control": "no-store" } },
   );

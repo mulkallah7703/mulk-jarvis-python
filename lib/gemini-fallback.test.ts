@@ -5,8 +5,11 @@ import {
   geminiErrorStatus,
   geminiModelChain,
   isGeminiAuthError,
+  isQuotaError,
+  isTemperatureRejection,
   shouldFallbackModel,
   thinkingConfig,
+  voiceModelChain,
 } from "./gemini-models.ts";
 
 describe("gemini model chain", () => {
@@ -26,6 +29,13 @@ describe("gemini model chain", () => {
     assert.deepEqual(geminiModelChain("gemini-3.6-flash", "   "), ["gemini-3.6-flash"]);
   });
 
+  it("keeps the voice path off lite models", () => {
+    assert.deepEqual(voiceModelChain("gemini-3.6-flash", "gemini-3.1-flash-lite, gemini-3.5-flash-lite"), [
+      "gemini-3.6-flash",
+    ]);
+    assert.deepEqual(voiceModelChain("gemini-3.1-flash-lite", "gemini-3.5-flash-lite"), ["gemini-3.1-flash-lite"]);
+  });
+
   it("keeps thinking low on gemini-3.6-flash and uses the verified lite settings", () => {
     assert.deepEqual(thinkingConfig("gemini-3.6-flash"), { thinkingLevel: "low" });
     assert.deepEqual(thinkingConfig("gemini-3.1-flash-lite"), { thinkingBudget: 0 });
@@ -38,7 +48,8 @@ describe("gemini fallback errors", () => {
   it("reads the upstream status from the SDK error", () => {
     const error = Object.assign(new Error("You exceeded your current quota"), { statusCode: 429 });
     assert.equal(geminiErrorStatus(error), 429);
-    assert.equal(shouldFallbackModel(error), true);
+    assert.equal(isQuotaError(error), true);
+    assert.equal(shouldFallbackModel(error), false);
     assert.equal(isGeminiAuthError(error), false);
   });
 
@@ -50,7 +61,8 @@ describe("gemini fallback errors", () => {
       responseBody: JSON.stringify({ error: { code: 429, status: "RESOURCE_EXHAUSTED" } }),
     };
     assert.equal(geminiErrorStatus(wrapped), 429);
-    assert.equal(shouldFallbackModel(wrapped), true);
+    assert.equal(isQuotaError(wrapped), true);
+    assert.equal(shouldFallbackModel(wrapped), false);
   });
 
   it("does not fall back on an invalid key or a bad prompt", () => {
@@ -58,14 +70,18 @@ describe("gemini fallback errors", () => {
     assert.equal(isGeminiAuthError(denied), true);
     assert.equal(shouldFallbackModel(denied), false);
     assert.equal(shouldFallbackModel({ statusCode: 400, message: "Request contains an invalid argument." }), false);
+    assert.equal(isTemperatureRejection({ statusCode: 400, message: "Request contains an invalid argument." }), true);
+    assert.equal(isTemperatureRejection({ statusCode: 400, message: "temperature is not supported" }), true);
+    assert.equal(isTemperatureRejection({ statusCode: 429, message: "temperature" }), false);
   });
 
-  it("treats a quota 403 as a fallback, not a bad key", () => {
+  it("treats a quota 403 as quota, not a bad key and not a model switch", () => {
     const quota = {
       statusCode: 403,
       message: "Quota exceeded for metric: generate_content_free_tier_requests",
     };
     assert.equal(isGeminiAuthError(quota), false);
-    assert.equal(shouldFallbackModel(quota), true);
+    assert.equal(isQuotaError(quota), true);
+    assert.equal(shouldFallbackModel(quota), false);
   });
 });

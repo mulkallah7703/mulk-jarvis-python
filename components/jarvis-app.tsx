@@ -6,11 +6,13 @@ import FaceFollow from "@/components/FaceFollow";
 import IntroTitle from "@/components/IntroTitle";
 import ParticleHologram from "@/components/ParticleHologram";
 import type { OrbState } from "@/components/orb-state";
+import { openEar, type Ear } from "@/lib/mic-ear";
 import { skipIntro, triggerAwaken } from "@/lib/presentation";
 import { armUiSounds, playReplyBlip, playWakeChime, setUiSoundsMuted, stopUiSounds } from "@/lib/ui-sounds";
 import {
   EMPTY_ANSWER,
   GREETING,
+  HISTORY_MESSAGES,
   REACH_ERROR,
   ackPhrase,
   cleanTranscript,
@@ -19,6 +21,7 @@ import {
   hasArabic,
   popSentences,
   sanitizeSpeech,
+  utteranceLang,
   withoutUnaskedClock,
   type SpeechQueue,
 } from "@/lib/text";
@@ -30,6 +33,7 @@ type Mode = "wake" | "session";
 type Phase = "starting" | "listening" | "thinking" | "speaking" | "muted";
 type Lang = "ar-SA" | "en-US";
 type TtsProvider = "browser" | "gemini" | "elevenlabs";
+type SttProvider = "scribe" | "browser";
 type Line = { id: number; who: "you" | "jarvis" | "heard"; text: string };
 
 type SpeechAlt = { transcript: string };
@@ -64,6 +68,7 @@ type Engine = {
   notice: string;
   hasKey: boolean | null;
   tts: TtsProvider;
+  stt: SttProvider;
   ttsFailed: boolean;
   lines: Line[];
   nextId: number;
@@ -74,6 +79,12 @@ type Engine = {
   lastFinal: string;
   lastFinalAt: number;
   rec: SpeechRec | null;
+  ear: Ear | null;
+  micStream: MediaStream | null;
+  heardLang: string;
+  langHint: string;
+  turnAt: number;
+  audioMarked: boolean;
   recOn: boolean;
   restartTimer: number | null;
   audio: HTMLAudioElement | null;
@@ -132,6 +143,7 @@ function createEngine(): Engine {
     notice: "",
     hasKey: null,
     tts: "browser",
+    stt: "browser",
     ttsFailed: false,
     lines: [],
     nextId: 1,
@@ -142,6 +154,12 @@ function createEngine(): Engine {
     lastFinal: "",
     lastFinalAt: 0,
     rec: null,
+    ear: null,
+    micStream: null,
+    heardLang: "",
+    langHint: "",
+    turnAt: 0,
+    audioMarked: false,
     recOn: false,
     restartTimer: null,
     audio: null,
@@ -199,6 +217,27 @@ function scheduleRestart(engine: Engine): void {
     engine.restartTimer = null;
     startRec(engine);
   }, 200);
+}
+
+function noteFirstAudio(engine: Engine): void {
+  if (!engine.turnAt || engine.audioMarked) return;
+  engine.audioMarked = true;
+  console.info(`[kora] heard-to-audio-ms ${Math.round(performance.now() - engine.turnAt)}`);
+}
+
+function pauseListen(engine: Engine): void {
+  pauseRec(engine);
+  engine.ear?.pause();
+}
+
+function resumeListen(engine: Engine): void {
+  if (!shouldListen(engine)) return;
+  if (engine.stt === "scribe" && engine.ear) {
+    engine.ear.resume();
+    engine.phase = "listening";
+    return;
+  }
+  startRec(engine);
 }
 
 function startRec(engine: Engine): void {
@@ -289,6 +328,7 @@ function speakBrowser(engine: Engine, text: string, generation: number): Promise
       return;
     }
     stopUiSounds();
+    noteFirstAudio(engine);
     synth.resume();
     synth.speak(utterance);
   });
@@ -377,6 +417,7 @@ async function playClip(
   rememberSpoken(engine, text);
   engine.phase = "speaking";
   publish();
+  noteFirstAudio(engine);
   const played = await playBlob(engine, clip.blob, generation);
   if (played || engine.generation !== generation || voice.name === "elevenlabs") return;
   await fallback();
@@ -438,6 +479,15 @@ export function JarvisApp() {
     const engine = createEngine();
     engine.lang = initialLang();
     const publish = () => setView(snapshot(engine));
+    const configReady = fetch("/api/config")
+      .then((response) => response.json())
+      .then((data: { hasGeminiKey?: boolean; tts?: TtsProvider; stt?: SttProvider }) => {
+        if (engine.closed) return;
+        engine.hasKey = Boolean(data.hasGeminiKey);
+        if (data.tts === "gemini" || data.tts === "elevenlabs" || data.tts === "browser") engine.tts = data.tts;
+        engine.stt = data.stt === "scribe" ? "scribe" : "browser";
+        publish();
+      });
 
     const releaseMic = () => {
       engine.busy = false;
@@ -451,7 +501,7 @@ export function JarvisApp() {
       if (engine.mode === "session" || engine.mode === "wake") {
         engine.phase = "listening";
         publish();
-        startRec(engine);
+        resumeListen(engine);
       }
     };
 
@@ -462,8 +512,14 @@ export function JarvisApp() {
         releaseMic();
         return;
       }
+      if (engine.audioMarked || !engine.turnAt) {
+        engine.turnAt = performance.now();
+        engine.audioMarked = false;
+      }
+      engine.langHint = utteranceLang(cleaned, engine.heardLang);
+      engine.heardLang = "";
       engine.history.push({ role: "user", content: cleaned });
-      engine.history = engine.history.slice(-12);
+      engine.history = engine.history.slice(-HISTORY_MESSAGES);
       engine.phase = "thinking";
       publish();
       let jarvisId = 0;
@@ -486,7 +542,7 @@ export function JarvisApp() {
       if (!jarvisId) pushLine(engine, "jarvis", answerText);
       else updateLine(engine, jarvisId, answerText);
       engine.history.push({ role: "assistant", content: answerText });
-      engine.history = engine.history.slice(-12);
+      engine.history = engine.history.slice(-HISTORY_MESSAGES);
       publish();
       releaseMic();
     };
@@ -515,7 +571,7 @@ export function JarvisApp() {
       const generation = engine.generation;
       engine.mode = "session";
       engine.busy = true;
-      pauseRec(engine);
+      pauseListen(engine);
       if (remainder.trim() && matchSpotify(remainder)) {
         const speaking = startSpotify(remainder, generation);
         if (speaking) {
@@ -541,7 +597,7 @@ export function JarvisApp() {
       engine.mode = "wake";
       engine.history = [];
       engine.busy = true;
-      pauseRec(engine);
+      pauseListen(engine);
       await sayFixed(goodbyePhrase(heard), generation);
       if (engine.generation !== generation) return;
       releaseMic();
@@ -549,6 +605,10 @@ export function JarvisApp() {
 
     const accept = async (raw: string) => {
       if (engine.closed || engine.muted || engine.busy) return;
+      if (engine.stt !== "scribe" || engine.audioMarked || !engine.turnAt) {
+        engine.turnAt = performance.now();
+        engine.audioMarked = false;
+      }
       const text = cleanTranscript(raw);
       if (!text || isEcho(engine, text)) return;
       const key = normalize(text);
@@ -566,7 +626,7 @@ export function JarvisApp() {
           return;
         }
         engine.busy = true;
-        pauseRec(engine);
+        pauseListen(engine);
         playWakeChime();
         triggerAwaken();
         pushLine(engine, "you", text);
@@ -584,7 +644,7 @@ export function JarvisApp() {
       }
 
       engine.busy = true;
-      pauseRec(engine);
+      pauseListen(engine);
       pushLine(engine, "you", text);
       publish();
       if (isStopPhrase(text)) {
@@ -650,38 +710,16 @@ export function JarvisApp() {
       engine.rec = rec;
     };
 
-    const arm = async () => {
-      primeWaveAudio();
-      armUiSounds();
-      engine.muted = false;
-      engine.needsTap = false;
-      engine.notice = "";
-      engine.unsupported = false;
-      publish();
-      if (!navigator.mediaDevices?.getUserMedia) {
-        engine.needsTap = true;
-        engine.phase = "listening";
-        engine.notice = "This browser cannot open a microphone.";
-        publish();
-        return;
-      }
-      try {
-        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        stream.getTracks().forEach((track) => track.stop());
-      } catch {
-        if (engine.closed) return;
-        engine.needsTap = true;
-        engine.notice = "Allow the microphone to listen for Kora.";
-        if (!engine.muted) engine.phase = "listening";
-        publish();
-        return;
-      }
-      if (engine.closed) return;
-      if (engine.muted) {
-        engine.phase = "muted";
-        publish();
-        return;
-      }
+    const stopMic = () => {
+      engine.ear?.stop();
+      engine.ear = null;
+      engine.micStream?.getTracks().forEach((track) => track.stop());
+      engine.micStream = null;
+    };
+
+    const useBrowserSpeech = () => {
+      engine.stt = "browser";
+      stopMic();
       const Ctor = recognitionCtor();
       if (!Ctor) {
         engine.unsupported = true;
@@ -694,6 +732,135 @@ export function JarvisApp() {
       engine.phase = "listening";
       publish();
       startRec(engine);
+    };
+
+    const transcribe = async (blob: Blob) => {
+      if (engine.closed || engine.muted || engine.busy || engine.stt !== "scribe") return;
+      engine.turnAt = performance.now();
+      engine.audioMarked = false;
+      engine.interim = "…";
+      publish();
+      engine.ear?.pause();
+      try {
+        const form = new FormData();
+        form.set("file", blob, "speech.wav");
+        const started = performance.now();
+        const response = await fetch("/api/stt", { method: "POST", body: form });
+        if (engine.closed) return;
+        if (response.status === 401 || response.status === 503) {
+          useBrowserSpeech();
+          return;
+        }
+        if (!response.ok) {
+          engine.interim = "";
+          publish();
+          return;
+        }
+        const data = (await response.json()) as { text?: string; language_code?: string };
+        console.info(`[kora] stt-ms ${Math.round(performance.now() - started)} lang ${data.language_code || ""}`);
+        engine.heardLang = data.language_code || "";
+        engine.interim = "";
+        const text = (data.text || "").trim();
+        if (!text) {
+          publish();
+          return;
+        }
+        await accept(text);
+      } catch {
+        if (!engine.closed && engine.stt === "scribe") {
+          engine.interim = "";
+          publish();
+        }
+      } finally {
+        if (!engine.closed && !engine.busy && !engine.muted && engine.stt === "scribe") {
+          engine.interim = "";
+          engine.phase = "listening";
+          engine.ear?.resume();
+          publish();
+        }
+      }
+    };
+
+    const arm = async () => {
+      primeWaveAudio();
+      armUiSounds();
+      void fetch("/api/warm").catch(() => undefined);
+      engine.muted = false;
+      engine.needsTap = false;
+      engine.notice = "";
+      engine.unsupported = false;
+      publish();
+      if (engine.stt === "scribe" && engine.ear) {
+        engine.phase = "listening";
+        engine.ear.resume();
+        publish();
+        return;
+      }
+      if (!navigator.mediaDevices?.getUserMedia) {
+        engine.needsTap = true;
+        engine.phase = "listening";
+        engine.notice = "This browser cannot open a microphone.";
+        publish();
+        return;
+      }
+      let stream: MediaStream;
+      let micFailed = false;
+      const micPromise = navigator.mediaDevices
+        .getUserMedia({
+          audio: {
+            echoCancellation: true,
+            noiseSuppression: true,
+            autoGainControl: true,
+            channelCount: { ideal: 1 },
+          },
+        })
+        .catch(() => navigator.mediaDevices.getUserMedia({ audio: true }))
+        .catch(() => {
+          micFailed = true;
+          return null;
+        });
+      try {
+        await configReady;
+      } catch {
+        engine.stt = "browser";
+      }
+      const opened = await micPromise;
+      if (micFailed || !opened) {
+        if (engine.closed) return;
+        engine.needsTap = true;
+        engine.notice = "Allow the microphone to listen for Kora.";
+        if (!engine.muted) engine.phase = "listening";
+        publish();
+        return;
+      }
+      stream = opened;
+      if (engine.closed) {
+        stream.getTracks().forEach((track) => track.stop());
+        return;
+      }
+      if (engine.muted) {
+        stream.getTracks().forEach((track) => track.stop());
+        engine.phase = "muted";
+        publish();
+        return;
+      }
+      if (engine.stt === "scribe") {
+        try {
+          engine.micStream = stream;
+          engine.ear = openEar(stream, (blob) => void transcribe(blob));
+          engine.phase = "listening";
+          if (engine.ear.suspended()) engine.needsTap = true;
+          publish();
+          return;
+        } catch {
+          stream.getTracks().forEach((track) => track.stop());
+          engine.micStream = null;
+          engine.ear = null;
+        }
+      } else {
+        stream.getTracks().forEach((track) => track.stop());
+      }
+      useBrowserSpeech();
     };
 
     api.current = {
@@ -710,7 +877,7 @@ export function JarvisApp() {
         engine.phase = "listening";
         setUiSoundsMuted(false);
         publish();
-        startRec(engine);
+        resumeListen(engine);
       },
       toggleMute: () => {
         if (engine.muted) {
@@ -719,19 +886,18 @@ export function JarvisApp() {
           engine.phase = "listening";
           setUiSoundsMuted(false);
           publish();
-          startRec(engine);
+          resumeListen(engine);
           return;
         }
         engine.generation += 1;
         stopAudio(engine);
         engine.mode = "wake";
-        engine.history = [];
         engine.busy = false;
         engine.muted = true;
         engine.interim = "";
         engine.phase = "muted";
         setUiSoundsMuted(true);
-        pauseRec(engine);
+        pauseListen(engine);
         publish();
       },
       setLang: (lang) => {
@@ -742,7 +908,7 @@ export function JarvisApp() {
           /* ignore */
         }
         publish();
-        if (!engine.rec) return;
+        if (engine.stt === "scribe" || !engine.rec) return;
         pauseRec(engine);
         if (!engine.recOn) startRec(engine);
       },
@@ -761,26 +927,24 @@ export function JarvisApp() {
     const unlock = () => {
       window.speechSynthesis?.resume();
       primeWaveAudio();
+      engine.ear?.resume();
     };
+    const warmTimer = window.setInterval(() => {
+      void fetch("/api/warm").catch(() => undefined);
+    }, 4 * 60 * 1000);
     window.addEventListener("keydown", onKey);
     window.addEventListener("pointerdown", unlock);
     publish();
+    void fetch("/api/warm").catch(() => undefined);
     void arm();
-    void fetch("/api/config")
-      .then((response) => response.json())
-      .then((data: { hasGeminiKey?: boolean; tts?: TtsProvider }) => {
-        if (engine.closed) return;
-        engine.hasKey = Boolean(data.hasGeminiKey);
-        if (data.tts === "gemini" || data.tts === "elevenlabs" || data.tts === "browser") engine.tts = data.tts;
-        publish();
-      })
-      .catch(() => undefined);
 
     return () => {
+      window.clearInterval(warmTimer);
       engine.closed = true;
       engine.generation += 1;
       stopAudio(engine);
-      pauseRec(engine);
+      pauseListen(engine);
+      stopMic();
       try {
         engine.rec?.abort();
       } catch {
@@ -990,7 +1154,7 @@ async function readAnswer(
   const response = await fetch("/api/chat", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ messages: engine.history }),
+    body: JSON.stringify({ messages: engine.history, lang: engine.langHint }),
     signal: abort.signal,
   });
   if (!response.ok || !response.body) throw new Error(`chat ${response.status}`);

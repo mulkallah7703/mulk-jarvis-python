@@ -7,6 +7,27 @@ export const MISSING_KEY = "Add a Gemini API key to answer questions. Wake word 
 export const EMPTY_ANSWER = "I don't have an answer for that.";
 export const REACH_ERROR = "I couldn't reach Gemini. Try again.";
 export const KEY_ERROR = "Check the Gemini API key and try again.";
+export const QUOTA_EN = "The free Gemini quota for today is used up. Turn on billing and I will answer properly.";
+export const QUOTA_AR = "خلصت حصة Gemini المجانية اليوم. فعّل الفوترة وأرد عليك زين.";
+export const HISTORY_MESSAGES = 20;
+
+export function quotaPhrase(lang: string, text = ""): string {
+  const code = (lang || "").toLowerCase();
+  if (code === "en" || code.startsWith("en")) return QUOTA_EN;
+  if (code === "ar" || code.startsWith("ar") || code === "mixed" || hasArabic(text)) return QUOTA_AR;
+  return QUOTA_EN;
+}
+
+/** Per utterance. Romanized Gulf still counts as Arabic when the recognizer says so. */
+export function utteranceLang(text: string, detected = ""): string {
+  const arabic = hasArabic(text);
+  const latin = /[A-Za-z]/.test(text);
+  const code = (detected || "").toLowerCase();
+  if (arabic && latin) return "mixed";
+  if (arabic || code.startsWith("ar")) return "ar";
+  if (latin || code.startsWith("en")) return "en";
+  return "";
+}
 
 const ARABIC = /[\u0600-\u06FF]/;
 const ABBREV = new Set(["mr", "mrs", "ms", "dr", "st", "vs", "prof", "sr", "jr"]);
