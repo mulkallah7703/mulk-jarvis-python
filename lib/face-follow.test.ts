@@ -1,10 +1,12 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { describe, it } from "node:test";
 
 import { FACE_WORKER_SOURCE } from "./face-tracker.ts";
 import {
   CAMERA_FALLBACK,
   DETECT_WARMUP,
+  FACE_CAMERA_KEY,
   FACE_FOLLOW_KEY,
   FACE_HOLD_MS,
   MAX_YAW,
@@ -13,16 +15,21 @@ import {
   approach,
   cameraConstraints,
   clearFaceLook,
+  faceFollowFailureMessage,
   faceLook,
+  isLinkedCamera,
   lookAngles,
   lookFromDetection,
   lookFromFace,
   mouseLook,
+  pickBuiltInCamera,
+  readFaceCameraId,
   readFaceFollowEnabled,
   resolveFaceSample,
   setFaceTarget,
   trackDetectCost,
   warpHome,
+  writeFaceCameraId,
   writeFaceFollowEnabled,
 } from "./face-follow.ts";
 
@@ -140,10 +147,11 @@ describe("face follow", () => {
     assert.equal(CAMERA_FALLBACK.video, true);
   });
 
-  it("lerps and keeps the head turn within a few degrees", () => {
+  it("lerps and turns the head far enough to see", () => {
     const mid = approach(0, 1, 180);
     assert.ok(mid > 0.6 && mid < 0.7);
-    assert.ok(MAX_YAW < (8 * Math.PI) / 180);
+    assert.ok(MAX_YAW > (14 * Math.PI) / 180);
+    assert.ok(MAX_YAW < (22 * Math.PI) / 180);
     const idle = mouseLook(-1, -1, 100, 100);
     assert.equal(idle.x, 0);
     const pointer = mouseLook(100, 50, 100, 100);
@@ -175,5 +183,41 @@ describe("face follow", () => {
     assert.ok(starShift < headShift);
     warpHome(head.x, head.y, 1, chestX, chestY, span, 1, 0, ang.yawCos, ang.yawSin, 0, out);
     assert.ok(out.x - head.x < headShift);
+  });
+
+  it("remembers a built-in camera and skips a linked phone", () => {
+    const store = memory();
+    assert.equal(readFaceCameraId(store), "");
+    writeFaceCameraId("integrated-1", store);
+    assert.equal(store.data.get(FACE_CAMERA_KEY), "integrated-1");
+    assert.equal(readFaceCameraId(store), "integrated-1");
+    assert.equal(isLinkedCamera("Integrated Camera"), false);
+    assert.equal(isLinkedCamera("Windows Virtual Camera"), true);
+    assert.equal(isLinkedCamera("Phone Link"), true);
+    assert.equal(isLinkedCamera("K's iPhone"), true);
+    assert.equal(isLinkedCamera("connected-camera"), true);
+    const devices = [
+      { deviceId: "phone", label: "Windows Virtual Camera" },
+      { deviceId: "builtin", label: "Integrated Camera" },
+    ];
+    assert.equal(pickBuiltInCamera(devices, "phone"), "builtin");
+    assert.equal(pickBuiltInCamera(devices, "builtin"), "builtin");
+    assert.equal(pickBuiltInCamera([{ deviceId: "phone", label: "Phone Link" }], "phone"), "phone");
+    assert.equal(faceFollowFailureMessage(new Error("NotAllowedError")), "Allow the camera to follow.");
+    assert.equal(faceFollowFailureMessage(new Error("slow")), "Camera follow is too slow on this device.");
+  });
+
+  it("does not open a camera until the button is clicked", () => {
+    const source = readFileSync(new URL("../components/FaceFollow.tsx", import.meta.url), "utf8");
+    assert.equal(source.includes("cameraAlreadyGranted"), false);
+    assert.equal(source.includes("getUserMedia"), false);
+    assert.equal(source.includes("enumerateDevices"), false);
+    assert.equal(source.includes("readFaceFollowEnabled"), false);
+    const tracker = readFileSync(new URL("./face-tracker.ts", import.meta.url), "utf8");
+    assert.equal(tracker.includes("permissions.query"), false);
+    assert.ok(tracker.indexOf("getUserMedia") < tracker.indexOf("enumerateDevices"));
+    assert.ok(tracker.indexOf("await requestVideo") < tracker.indexOf("enumerateDevices"));
+    assert.equal(tracker.includes("audio: false"), true);
+    assert.equal(tracker.includes("audio: true"), false);
   });
 });

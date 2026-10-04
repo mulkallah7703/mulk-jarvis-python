@@ -2,14 +2,15 @@
 
 export const FACE_FOLLOW_KEY = "kora-face-follow";
 export const FACE_FOLLOW_SLOW_KEY = "kora-face-follow-slow";
+export const FACE_CAMERA_KEY = "kora-face-camera";
 export const DETECT_INTERVAL_MS = 56;
-export const SLOW_DETECT_MS = 70;
+export const SLOW_DETECT_MS = 280;
 export const SLOW_FRAME_LIMIT = 8;
 export const DETECT_WARMUP = 3;
 export const FACE_HOLD_MS = 350;
 export const LOOK_TAU_MS = 180;
-export const MAX_YAW = (6 * Math.PI) / 180;
-export const MAX_PITCH = (4 * Math.PI) / 180;
+export const MAX_YAW = (18 * Math.PI) / 180;
+export const MAX_PITCH = (8 * Math.PI) / 180;
 
 export type Look = { x: number; y: number };
 
@@ -106,6 +107,47 @@ export function clearFaceFollowSlow(storage: KeyValueStore | null = browserStore
   } catch {
     /* ignore */
   }
+}
+
+export function readFaceCameraId(storage: KeyValueStore | null = browserStore("localStorage")): string {
+  try {
+    return storage?.getItem(FACE_CAMERA_KEY)?.trim() || "";
+  } catch {
+    return "";
+  }
+}
+
+export function writeFaceCameraId(deviceId: string, storage: KeyValueStore | null = browserStore("localStorage")): void {
+  try {
+    if (!storage || !deviceId) return;
+    storage.setItem(FACE_CAMERA_KEY, deviceId);
+  } catch {
+    /* private mode */
+  }
+}
+
+/** Phone Link and other virtual cameras that Windows tries to wake. */
+export function isLinkedCamera(label: string): boolean {
+  return /phone|virtual|windows virtual camera|connected[-\s]?camera|\blink\b/i.test(label);
+}
+
+export function pickBuiltInCamera(
+  devices: { deviceId: string; label: string }[],
+  activeId: string,
+): string {
+  const usable = devices.filter((device) => device.deviceId && !isLinkedCamera(device.label));
+  if (usable.length === 0) return activeId;
+  if (activeId && usable.some((device) => device.deviceId === activeId)) return activeId;
+  const integrated = usable.find((device) => /integrated|built-?in|facetime|truevision/i.test(device.label));
+  return (integrated ?? usable[0]).deviceId;
+}
+
+export function faceFollowFailureMessage(error: unknown): string {
+  const text = error instanceof Error ? error.message : String(error || "");
+  if (/notallowed|permission|denied/i.test(text)) return "Allow the camera to follow.";
+  if (/slow/i.test(text)) return "Camera follow is too slow on this device.";
+  if (/timed out|model|vision|wasm|worker/i.test(text)) return "Camera follow couldn't load. Try again.";
+  return "Camera follow couldn't start.";
 }
 
 /**
@@ -243,7 +285,7 @@ export function warpHome(
   out.x = chestX + dx * yawCos - dy * yawSin * depth;
   out.y = hy + pitchSin * depth * span * 0.16 + dx * yawSin * depth * 0.08;
   if (kind === 3) {
-    out.x += followX * span * 0.01;
-    out.y += followY * span * 0.006;
+    out.x += followX * span * 0.034;
+    out.y += followY * span * 0.018;
   }
 }

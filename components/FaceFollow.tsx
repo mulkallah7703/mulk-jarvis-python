@@ -2,15 +2,10 @@
 
 import { useEffect, useRef, useState } from "react";
 
-import {
-  cameraAlreadyGranted,
-  startFaceTracker,
-  type FaceTracker,
-} from "@/lib/face-tracker";
+import { startFaceTracker, type FaceTracker } from "@/lib/face-tracker";
 import {
   clearFaceLook,
-  faceFollowTooSlow,
-  readFaceFollowEnabled,
+  faceFollowFailureMessage,
   writeFaceFollowEnabled,
 } from "@/lib/face-follow";
 
@@ -18,25 +13,25 @@ export default function FaceFollow() {
   const videoRef = useRef<HTMLVideoElement>(null);
   const trackerRef = useRef<FaceTracker | null>(null);
   const generation = useRef(0);
+  const noticeTimer = useRef(0);
   const [live, setLive] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [notice, setNotice] = useState("");
+
+  function showNotice(text: string) {
+    setNotice(text);
+    window.clearTimeout(noticeTimer.current);
+    noticeTimer.current = window.setTimeout(() => setNotice(""), 4200);
+  }
 
   useEffect(() => {
-    let cancel = false;
-    if (!readFaceFollowEnabled() || faceFollowTooSlow()) return undefined;
-    void cameraAlreadyGranted().then((granted) => {
-      if (cancel || !granted) return;
-      void enable();
-    });
     return () => {
-      cancel = true;
       generation.current += 1;
+      window.clearTimeout(noticeTimer.current);
       trackerRef.current?.stop();
       trackerRef.current = null;
       clearFaceLook();
     };
-    // enable is stable for this mount; the generation guard covers a second start.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   async function enable() {
@@ -46,10 +41,13 @@ export default function FaceFollow() {
     setBusy(true);
     try {
       const tracker = await startFaceTracker(video, {
-        onSlow: () => {
+        onFail: (message) => {
           if (generation.current !== token) return;
           trackerRef.current = null;
+          writeFaceFollowEnabled(false);
+          clearFaceLook();
           setLive(false);
+          showNotice(message);
         },
       });
       if (generation.current !== token) {
@@ -59,11 +57,12 @@ export default function FaceFollow() {
       trackerRef.current = tracker;
       writeFaceFollowEnabled(true);
       setLive(true);
-    } catch {
+    } catch (error) {
       if (generation.current === token) {
         writeFaceFollowEnabled(false);
         clearFaceLook();
         setLive(false);
+        showNotice(faceFollowFailureMessage(error));
       }
     } finally {
       if (generation.current === token) setBusy(false);
@@ -97,7 +96,12 @@ export default function FaceFollow() {
       >
         <CameraIcon />
       </button>
-      <video ref={videoRef} className="face-video" muted playsInline autoPlay aria-hidden="true" />
+      <video ref={videoRef} className="face-video" muted playsInline aria-hidden="true" />
+      {notice ? (
+        <p className="face-toast" role="status">
+          {notice}
+        </p>
+      ) : null}
     </>
   );
 }
