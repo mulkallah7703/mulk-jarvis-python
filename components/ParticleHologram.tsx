@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef } from "react";
-import { approach, faceLook, lookAngles, mouseLook, warpHome } from "@/lib/face-follow";
+import { faceLook, lookAngles, lookDeadZone, mouseLook, springStep, warpHome } from "@/lib/face-follow";
 import { awakenAge, easeOutCubic, INTRO_MS, isIntroSkipped, PULSE_MS, rippleBand, tintFor, tintParticle } from "@/lib/presentation";
 import { noteWaveLevel, sampleSpeechLevel, waveOffsetAt } from "@/lib/speech-level";
 import type { OrbState } from "./orb-state";
@@ -76,6 +76,8 @@ export default function ParticleHologram({ mode = "idle", energy = 0 }: Props) {
     let span = 1;
     let lookX = 0;
     let lookY = 0;
+    const springX = { x: 0, v: 0 };
+    const springY = { x: 0, v: 0 };
     const warpOut = { x: 0, y: 0 };
     const introT0 = performance.now();
     const reduced =
@@ -163,16 +165,18 @@ export default function ParticleHologram({ mode = "idle", energy = 0 }: Props) {
           targetY = pointer.y;
         }
       }
-      lookX = approach(lookX, targetX, dt);
-      lookY = approach(lookY, targetY, dt);
+      lookX = springStep(springX, lookDeadZone(targetX), dt);
+      lookY = springStep(springY, lookDeadZone(targetY), dt);
       const warping = !forming && !reduced && (Math.abs(lookX) > 0.004 || Math.abs(lookY) > 0.004);
       let yawCos = 1;
       let yawSin = 0;
+      let pitchCos = 1;
       let pitchSin = 0;
       if (warping) {
         const angles = lookAngles(lookX, lookY);
         yawCos = angles.yawCos;
         yawSin = angles.yawSin;
+        pitchCos = angles.pitchCos;
         pitchSin = angles.pitchSin;
       }
 
@@ -249,7 +253,24 @@ export default function ParticleHologram({ mode = "idle", energy = 0 }: Props) {
         if (warping) {
           const homeX = p.hx[i] ?? 0;
           const homeY = p.hy[i] ?? 0;
-          warpHome(homeX, homeY, p.kind[i] ?? 0, chestX, chestY, span, lookX, lookY, yawCos, yawSin, pitchSin, warpOut);
+          const lum =
+            (0.2126 * (p.r[i] ?? 0) + 0.7152 * (p.g[i] ?? 0) + 0.0722 * (p.b[i] ?? 0)) * (1 / 255);
+          warpHome(
+            homeX,
+            homeY,
+            p.kind[i] ?? 0,
+            chestX,
+            chestY,
+            span,
+            lookX,
+            lookY,
+            yawCos,
+            yawSin,
+            pitchCos,
+            pitchSin,
+            warpOut,
+            lum,
+          );
           drawX += warpOut.x - homeX;
           drawY += warpOut.y - homeY;
         }
