@@ -401,7 +401,7 @@ export default function ParticleHologram({ mode = "idle", energy = 0 }: Props) {
           return;
         }
         const nx = x / imgW;
-        const eye = ny > 0.17 && ny < 0.31 && nx > 0.36 && nx < 0.64;
+        const eye = ny > 0.19 && ny < 0.29 && nx > 0.37 && nx < 0.56;
         const head = ny < 0.42;
         pushWorld(ox + x * scale, oy + y * scale, r, g, b, eye ? 3 : head ? 2 : 0, DOT);
       };

@@ -5,11 +5,15 @@ import {
   cameraConstraints,
   clearFaceFollowSlow,
   clearFaceLook,
+  faceFollowFailureMessage,
   lookFromDetection,
   markFaceFollowSlow,
+  pickBuiltInCamera,
+  readFaceCameraId,
   resolveFaceSample,
   setFaceTarget,
   trackDetectCost,
+  writeFaceCameraId,
 } from "./face-follow.ts";
 
 const VISION_VERSION = "0.10.21";
@@ -91,25 +95,73 @@ self.onmessage = async (event) => {
 
 export type FaceTracker = { stop: () => void };
 
-export async function cameraAlreadyGranted(): Promise<boolean> {
+function videoConstraints(deviceId?: string): MediaTrackConstraints | boolean {
+  const size = {
+    width: { ideal: 320 },
+    height: { ideal: 240 },
+    frameRate: { ideal: 15, max: 20 },
+  };
+  if (!deviceId) return { ...cameraConstraints().video };
+  return { ...size, deviceId: { exact: deviceId } };
+}
+
+async function requestVideo(video: MediaTrackConstraints | boolean): Promise<MediaStream> {
+  if (typeof navigator === "undefined" || !navigator.mediaDevices?.getUserMedia) {
+    throw new Error("camera unavailable");
+  }
+  return navigator.mediaDevices.getUserMedia({ audio: false, video });
+}
+
+async function openDefaultCamera(): Promise<MediaStream> {
   try {
-    if (typeof navigator === "undefined" || !navigator.permissions?.query) return false;
-    const status = await navigator.permissions.query({ name: "camera" as PermissionName });
-    return status.state === "granted";
+    return await requestVideo(videoConstraints());
   } catch {
-    return false;
+    return await requestVideo(CAMERA_FALLBACK.video);
+  }
+}
+
+/** Permission first, then labels. Never called on page load. */
+async function preferBuiltIn(stream: MediaStream): Promise<MediaStream> {
+  if (typeof navigator === "undefined" || !navigator.mediaDevices?.enumerateDevices) return stream;
+  let listed: MediaDeviceInfo[] = [];
+  try {
+    listed = await navigator.mediaDevices.enumerateDevices();
+  } catch {
+    return stream;
+  }
+  const active = stream.getVideoTracks()[0]?.getSettings().deviceId || "";
+  const next = pickBuiltInCamera(
+    listed.filter((device) => device.kind === "videoinput").map((device) => ({
+      deviceId: device.deviceId,
+      label: device.label,
+    })),
+    active,
+  );
+  if (!next || next === active) return stream;
+  for (const track of stream.getTracks()) track.stop();
+  try {
+    return await requestVideo(videoConstraints(next));
+  } catch {
+    return openDefaultCamera();
   }
 }
 
 async function openCamera(): Promise<MediaStream> {
-  if (typeof navigator === "undefined" || !navigator.mediaDevices?.getUserMedia) {
-    throw new Error("camera unavailable");
+  const saved = readFaceCameraId();
+  let stream: MediaStream;
+  if (saved) {
+    try {
+      stream = await requestVideo(videoConstraints(saved));
+    } catch {
+      stream = await openDefaultCamera();
+    }
+  } else {
+    stream = await openDefaultCamera();
   }
-  try {
-    return await navigator.mediaDevices.getUserMedia(cameraConstraints());
-  } catch {
-    return await navigator.mediaDevices.getUserMedia(CAMERA_FALLBACK);
-  }
+  stream = await preferBuiltIn(stream);
+  const chosen = stream.getVideoTracks()[0]?.getSettings().deviceId || "";
+  if (chosen) writeFaceCameraId(chosen);
+  return stream;
 }
 
 type WorkerResult = {
@@ -128,7 +180,7 @@ type WorkerResult = {
  */
 export async function startFaceTracker(
   video: HTMLVideoElement,
-  hooks?: { onSlow?: () => void },
+  hooks?: { onFail?: (message: string) => void },
 ): Promise<FaceTracker> {
   clearFaceFollowSlow();
   const stream = await openCamera();
@@ -183,7 +235,7 @@ export async function startFaceTracker(
     if (stopped) return;
     if (message.type === "error") {
       stop();
-      hooks?.onSlow?.();
+      hooks?.onFail?.(faceFollowFailureMessage(new Error(message.message || "face model failed")));
       return;
     }
     const cost = trackDetectCost(costs, message.ms ?? 0, warmup);
@@ -192,7 +244,7 @@ export async function startFaceTracker(
     if (cost.disable) {
       markFaceFollowSlow();
       stop();
-      hooks?.onSlow?.();
+      hooks?.onFail?.(faceFollowFailureMessage(new Error("slow")));
       return;
     }
     const live = message.box
@@ -211,7 +263,7 @@ export async function startFaceTracker(
   worker.onerror = () => {
     if (stopped) return;
     stop();
-    hooks?.onSlow?.();
+    hooks?.onFail?.(faceFollowFailureMessage(new Error("worker failed")));
   };
 
   const ready = new Promise<void>((resolve, reject) => {
