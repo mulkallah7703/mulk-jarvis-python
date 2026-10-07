@@ -363,7 +363,8 @@ h1 {
 .controls button,
 .composer button,
 .tap,
-.spotify-toast {
+.spotify-toast,
+.x-toast {
   border: 1px solid var(--line);
   background: rgba(0, 229, 255, 0.08);
   border-radius: 999px;
