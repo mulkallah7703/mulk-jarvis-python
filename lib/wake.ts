@@ -16,13 +16,14 @@ const ARABIC_MAP: Record<string, string> = {
 };
 
 // Longer phrases first for readability. Matching still picks the earliest
-// token, then the longest phrase there. كوره is a realistic hearing of كورا,
-// but ة folds into ه, so it would also wake on كورة (football). Left out.
+// token, then the longest phrase there. كورة is a common hearing of كورا.
 const WAKE_RAW = [
   "hey kora",
   "hi kora",
   "يا كورا",
   "هاي كورا",
+  "يا كورة",
+  "هاي كورة",
   "kora",
   "cora",
   "korra",
@@ -31,6 +32,8 @@ const WAKE_RAW = [
   "kura",
   "كورا",
   "قورا",
+  "كورة",
+  "كوره",
 ];
 
 const STOP_RAW = [
@@ -71,6 +74,9 @@ const STOP_RAW = [
   "وقف يا كورا",
   "توقف يا كورا",
   "يا كورا توقف",
+  "توقف كورة",
+  "اوقف كورة",
+  "يا كورة توقف",
 ];
 
 const EDGE_CHARS = " ،,";
@@ -162,6 +168,22 @@ export function matchWake(text: string): WakeMatch | null {
   let rawStart = pieces[end]?.index ?? raw.length;
   if (pieces.slice(0, end).some((piece) => piece.index === rawStart)) rawStart += 1;
   return { remainder: stripEdges(raw.slice(rawStart).join(" ")) };
+}
+
+const WAKE_PREFIX =
+  /^(?:hey kora|hi kora|ya kora|يا كورا|هاي كورا|يا كوره|هاي كوره|kora|cora|korra|corra|qora|kura|كورا|قورا|كوره)\s+/;
+const LEAD_PREFIX =
+  /^(?:please|pls|hey|hi|ok|okay|now|can you|could you|would you|لو سمحت|من فضلك|ياخي|يا|ابي|ابغى|ابغي|ودي|خلني|خل|طيب|يلا|اوكي)\s+/;
+
+/** Drop a leading wake word and polite filler. Input must already be normalized. */
+export function stripAddress(text: string): string {
+  let current = text.trim();
+  for (let pass = 0; pass < 8; pass += 1) {
+    const next = current.replace(WAKE_PREFIX, "").replace(LEAD_PREFIX, "").trim();
+    if (next === current) return current;
+    current = next;
+  }
+  return current;
 }
 
 export function isStopPhrase(text: string): boolean {

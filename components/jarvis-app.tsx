@@ -517,6 +517,20 @@ export function JarvisApp() {
     };
 
     const answer = async (command: string, generation: number) => {
+      if (matchX(command)) {
+        const speaking = startX(command, generation);
+        if (speaking) {
+          await speaking;
+          return;
+        }
+      }
+      if (matchSpotify(command)) {
+        const speaking = startSpotify(command, generation);
+        if (speaking) {
+          await speaking;
+          return;
+        }
+      }
       engine.ttsFailed = false;
       const cleaned = sanitizeSpeech(command);
       if (!cleaned || engine.generation !== generation) {

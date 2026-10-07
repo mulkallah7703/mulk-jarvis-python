@@ -4,7 +4,7 @@
  */
 
 import { hasArabic } from "./text.ts";
-import { normalize } from "./wake.ts";
+import { normalize, stripAddress } from "./wake.ts";
 
 export type SpotifyIntent = {
   kind: "open" | "play";
@@ -18,11 +18,8 @@ export type SpotifyTarget = {
 
 const SPOTIFY = "(?:ال\\s+)?spotify";
 const MUSIC = "(?:ال)?(?:موسيقي|اغاني|اغنيه)";
-const LEADING_WAKE =
-  /^(?:hey kora|hi kora|ya kora|يا كورا|هاي كورا|kora|cora|korra|corra|qora|kura|كورا|قورا)\s+/;
-const LEAD =
-  /^(?:please|pls|hey|hi|ok|okay|now|can you|could you|would you|لو سمحت|من فضلك|ياخي|يا|ابي|ابغى|ابغي|ودي|خلني|خل)\s+/;
 const TRAIL = /\s+(?:please|pls|now|لو سمحت|من فضلك|الحين)$/;
+const PLAY = "(?:شغل|حط|طق|سمعني|سوي|سو)";
 
 // Longer aliases first. Web Speech often splits or misspells the name.
 const SPOTIFY_ALIASES: string[][] = [
@@ -65,18 +62,7 @@ function foldSpotify(text: string): string {
 }
 
 function corePhrase(raw: string): string {
-  let text = normalize(raw);
-  for (let pass = 0; pass < 3; pass += 1) {
-    const next = text.replace(LEADING_WAKE, "").trim();
-    if (next === text) break;
-    text = next;
-  }
-  for (let pass = 0; pass < 4; pass += 1) {
-    const next = text.replace(LEAD, "");
-    if (next === text) break;
-    text = next;
-  }
-  text = text.replace(TRAIL, "");
+  const text = stripAddress(normalize(raw)).replace(TRAIL, "");
   return foldSpotify(text).replace(/\s+/g, " ").trim();
 }
 
@@ -113,21 +99,21 @@ export function matchSpotify(raw: string): SpotifyIntent | null {
   if (!text || text.length > 140) return null;
 
   const openHome = new RegExp(
-    `^(?:open|launch|start|play)\\s+(?:up\\s+)?(?:the\\s+|my\\s+)?${SPOTIFY}$|^(?:افتح|فتح|شغل|حط|طق)\\s+(?:لي\\s+)?${SPOTIFY}$|^${SPOTIFY}$`,
+    `^(?:open|launch|start|play)\\s+(?:up\\s+)?(?:the\\s+|my\\s+)?${SPOTIFY}$|^(?:افتح|فتح|${PLAY})\\s+(?:لي\\s+)?${SPOTIFY}$|^${SPOTIFY}$`,
   );
   if (openHome.test(text)) return { kind: "open", query: "" };
 
   const playGeneric = new RegExp(
-    `^(?:play|put on|start)\\s+(?:some\\s+|the\\s+|a\\s+)?(?:music|songs?)(?:\\s+(?:on|in|from|via)\\s+${SPOTIFY})?$|^(?:شغل|حط|طق|سمعني)\\s+(?:لي\\s+)?${MUSIC}(?:\\s+(?:في|على|من)\\s+${SPOTIFY})?$`,
+    `^(?:play|put on|start)\\s+(?:some\\s+|the\\s+|a\\s+)?(?:music|songs?)(?:\\s+(?:on|in|from|via)\\s+${SPOTIFY})?$|^${PLAY}\\s+(?:لي\\s+)?${MUSIC}(?:\\s+(?:في|على|من)\\s+${SPOTIFY})?$`,
   );
   if (playGeneric.test(text)) return { kind: "play", query: "" };
 
   const patterns = [
     new RegExp(`^(?:play|put on|search(?:\\s+for)?)\\s+(.+?)\\s+(?:on|in|from|via)\\s+${SPOTIFY}$`),
     new RegExp(`^${SPOTIFY}\\s+(?:play|search)\\s+(.+)$`),
-    new RegExp(`^(?:افتح|فتح)\\s+${SPOTIFY}\\s+(?:و\\s*)?(?:شغل|حط)\\s+(?:لي\\s+)?(?:${MUSIC}\\s+)?(.+)$`),
-    new RegExp(`^(?:شغل|حط|طق|سمعني)\\s+(?:لي\\s+)?${MUSIC}\\s+(.+?)(?:\\s+(?:في|على|من)\\s+${SPOTIFY})?$`),
-    new RegExp(`^(?:شغل|حط|طق|سمعني)\\s+(?:لي\\s+)?(.+?)\\s+(?:في|على|من)\\s+${SPOTIFY}$`),
+    new RegExp(`^(?:افتح|فتح)\\s+${SPOTIFY}\\s+(?:و\\s*)?(?:${PLAY})\\s+(?:لي\\s+)?(?:${MUSIC}\\s+)?(.+)$`),
+    new RegExp(`^${PLAY}\\s+(?:لي\\s+)?${MUSIC}\\s+(.+?)(?:\\s+(?:في|على|من)\\s+${SPOTIFY})?$`),
+    new RegExp(`^${PLAY}\\s+(?:لي\\s+)?(.+?)\\s+(?:في|على|من)\\s+${SPOTIFY}$`),
   ];
   for (const pattern of patterns) {
     const hit = text.match(pattern);
