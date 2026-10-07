@@ -27,7 +27,7 @@ import {
 } from "@/lib/text";
 import { playSpeechBlob, primeWaveAudio, stopSpeechPlayback } from "@/lib/speech-level";
 import { launchSpotify, matchSpotify, spotifyLine, spotifyTarget, type SpotifyTarget } from "@/lib/spotify";
-import { launchX, matchX, xFailedLine, xLine, xPermissionLine, xPostedLine, xTarget, type XTarget } from "@/lib/x";
+import { launchX, matchX, xDraftLine, xLine, xPermissionLine, xPostedLine, xTarget, type XTarget } from "@/lib/x";
 import { isStopPhrase, matchWake, normalize } from "@/lib/wake";
 
 type Mode = "wake" | "session";
@@ -596,6 +596,11 @@ export function JarvisApp() {
         });
       };
       if (intent.kind === "open") return finish(xLine(command, intent), launchX(target) ? null : target);
+      // Open the composer in this turn, before any API wait, so a blocked popup still leaves the button.
+      const composeOpened = launchX(target);
+      engine.xPrompt = composeOpened ? null : target;
+      publish();
+      const draftPrompt = composeOpened ? null : target;
       return (async () => {
         if (engine.xPost !== false) {
           try {
@@ -603,29 +608,27 @@ export function JarvisApp() {
               method: "POST",
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({ text: intent.text }),
+              signal: AbortSignal.timeout(8000),
             });
             const data = (await response.json()) as { posted?: boolean; url?: string; reason?: string; text?: string };
             if (engine.generation !== generation) return;
             if (data.posted && data.url) {
-              await finish(xPostedLine(command, data.url), null);
+              const live: XTarget = { text: target.text, web: data.url, apps: [] };
+              const showedLive = launchX(live);
+              await finish(xPostedLine(command, data.url), showedLive || composeOpened ? null : live);
               return;
             }
-            if (data.reason === "permissions") {
-              await finish(xPermissionLine(command), launchX(target) ? null : target);
-              return;
-            }
-            if (data.reason === "failed" || !response.ok) {
-              await finish(xFailedLine(command), launchX(target) ? null : target);
-              return;
-            }
+            const line = data.reason === "permissions" ? xPermissionLine(command) : xDraftLine(command);
+            await finish(line, draftPrompt);
+            return;
           } catch {
             if (engine.generation !== generation) return;
-            await finish(xFailedLine(command), launchX(target) ? null : target);
+            await finish(xDraftLine(command), draftPrompt);
             return;
           }
         }
         if (engine.generation !== generation) return;
-        await finish(xLine(command, intent), launchX(target) ? null : target);
+        await finish(xDraftLine(command), draftPrompt);
       })();
     };
 

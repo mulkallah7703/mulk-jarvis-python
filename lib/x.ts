@@ -71,17 +71,37 @@ const POST_COMMANDS = [
   ["افتح", "اكس", "وانشر", "منشور"],
   ["افتح", "اكس", "وانشر", "تغريده"],
   ["افتح", "اكس", "و", "انشر", "منشور"],
+  ["افتح", "اكس", "و", "انشر", "تغريده"],
   ["افتح", "اكس", "و", "انشر"],
   ["افتح", "اكس", "وانشر"],
+  ["افتح", "اكس", "and", "انشر", "منشور"],
+  ["افتح", "اكس", "and", "انشر"],
+  ["افتح", "اكس", "انشر", "منشور"],
+  ["افتح", "اكس", "انشر", "تغريده"],
+  ["افتح", "اكس", "انشر"],
   ["افتح", "x", "وانشر", "منشور"],
   ["افتح", "x", "وانشر"],
+  ["افتح", "x", "انشر", "منشور"],
+  ["افتح", "x", "انشر"],
   ["افتح", "تويتر", "وانشر", "منشور"],
   ["افتح", "تويتر", "وانشر"],
+  ["افتح", "تويتر", "انشر", "منشور"],
+  ["افتح", "تويتر", "انشر"],
   ["open", "x", "and", "tweet"],
   ["open", "x", "and", "post"],
   ["open", "twitter", "and", "tweet"],
   ["open", "twitter", "and", "post"],
+  ["open", "x", "tweet"],
+  ["open", "x", "post"],
+  ["open", "twitter", "tweet"],
+  ["open", "twitter", "post"],
 ];
+
+/** Speech-to-text often hears "and" as "android". */
+function foldToken(piece: string): string {
+  if (piece === "android" || piece === "اندرويد") return "and";
+  return piece;
+}
 
 function corePhrase(raw: string): string {
   let text = normalize(raw);
@@ -95,14 +115,19 @@ function corePhrase(raw: string): string {
     if (next === text) break;
     text = next;
   }
-  return text.replace(TRAIL, "").replace(/\s+/g, " ").trim();
+  return text
+    .replace(TRAIL, "")
+    .split(" ")
+    .filter(Boolean)
+    .map(foldToken)
+    .join(" ");
 }
 
 function rawPieces(raw: string): { words: string[]; pieces: { index: number; piece: string }[] } {
   const words = raw.trim().split(/\s+/).filter(Boolean);
   const pieces: { index: number; piece: string }[] = [];
   words.forEach((word, index) => {
-    for (const piece of normalize(word).split(" ").filter(Boolean)) pieces.push({ index, piece });
+    for (const piece of normalize(word).split(" ").filter(Boolean)) pieces.push({ index, piece: foldToken(piece) });
   });
   return { words, pieces };
 }
@@ -259,6 +284,19 @@ const PERMISSION_EN = [
   "X blocked the write, so regenerate the Access Token with Read and Write.",
 ];
 
+const DRAFT_EN = [
+  "The draft is open on X, so press Post.",
+  "X is open on the post, so hit Post.",
+  "The hashtags are in the draft, so press Post.",
+  "I opened X on your words, so press Post.",
+  "The composer is ready, so hit Post.",
+  "X has the draft, so press Post.",
+  "Your text is in X, so hit Post.",
+  "The post is waiting in X, so press Post.",
+  "Opened X with the hashtags, so hit Post.",
+  "The draft is up on X, so press Post.",
+];
+
 const FAILED_EN = [
   "I couldn't post it directly, so X is open.",
   "Direct post failed, so I opened X.",
@@ -337,6 +375,19 @@ const PERMISSION_AR = [
   "إكس قافل الكتابة، جدد Access Token بخيار Read and Write.",
 ];
 
+const DRAFT_AR = [
+  "المسودة في إكس، اضغط نشر.",
+  "إكس مفتوح على الكلام، اضغط نشر.",
+  "الهاشتاقات في المسودة، اضغط Post.",
+  "فتحت إكس على المنشور، اضغط نشر.",
+  "الكلام جاهز في إكس، اضغط Post.",
+  "المسودة قدامك، اضغط نشر.",
+  "إكس فاتح على النص، اضغط Post.",
+  "حطيت المنشور في إكس، اضغط نشر.",
+  "الهاشتاق في الأخير، اضغط نشر.",
+  "إكس مفتوح على المسودة، اضغط Post.",
+];
+
 const FAILED_AR = [
   "ما قدرت أنشره مباشرة، فتحت إكس.",
   "النشر المباشر ما تم، وإكس مفتوح.",
@@ -356,12 +407,13 @@ export function resetXLines(): void {
   lastXLine.clear();
 }
 
-function poolFor(arabic: boolean, kind: "open" | "compose" | "ask" | "posted" | "failed" | "permissions"): string[] {
+function poolFor(arabic: boolean, kind: "open" | "compose" | "ask" | "posted" | "failed" | "permissions" | "draft"): string[] {
   if (kind === "ask") return arabic ? ASK_AR : ASK_EN;
   if (kind === "compose") return arabic ? COMPOSE_AR : COMPOSE_EN;
   if (kind === "posted") return arabic ? POSTED_AR : POSTED_EN;
   if (kind === "failed") return arabic ? FAILED_AR : FAILED_EN;
   if (kind === "permissions") return arabic ? PERMISSION_AR : PERMISSION_EN;
+  if (kind === "draft") return arabic ? DRAFT_AR : DRAFT_EN;
   return arabic ? OPEN_AR : OPEN_EN;
 }
 
@@ -393,6 +445,12 @@ export function xPostedLine(raw: string, url: string, random: () => number = Mat
 export function xFailedLine(raw: string, random: () => number = Math.random): string {
   const arabic = spokenArabic(raw);
   return pickLine(`${arabic ? "ar" : "en"}:failed`, poolFor(arabic, "failed"), random);
+}
+
+/** Spoken when the composer is open and the direct post did not land. */
+export function xDraftLine(raw: string, random: () => number = Math.random): string {
+  const arabic = spokenArabic(raw);
+  return pickLine(`${arabic ? "ar" : "en"}:draft`, poolFor(arabic, "draft"), random);
 }
 
 /** Spoken when X answers 401 or 403: the user token cannot write. */
