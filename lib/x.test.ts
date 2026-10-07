@@ -9,6 +9,7 @@ import {
   matchX,
   resetXLines,
   xDraftLine,
+  xDuplicateLine,
   xLine,
   xPermissionLine,
   xPostedLine,
@@ -148,10 +149,16 @@ describe("x intents", () => {
     assert.equal(/جاهزة/.test(posted), false);
     resetXLines();
     const permission = xPermissionLine("انشر سلام", () => 0);
-    assert.match(permission, /Access Token/);
+    assert.match(permission, /Developer Portal/);
     assert.match(permission, /Read and Write/);
+    assert.equal(/Access Token|جدد/.test(permission), false);
     assert.equal((permission.match(/[.!?؟]/g) || []).length, 1, permission);
     assert.equal(/جاهزة|قلتِ|أنشري/.test(permission), false);
+    resetXLines();
+    const duplicate = xDuplicateLine("انشر سلام", () => 0);
+    assert.match(duplicate, /إكس/);
+    assert.equal(/Access Token|Developer Portal|جدد/.test(duplicate), false);
+    assert.equal((duplicate.match(/[.!?؟]/g) || []).length, 1, duplicate);
     resetXLines();
     const draft = xDraftLine(`افتح اكس انشر منشور ${SAMPLE}`, () => 0);
     assert.match(draft, /نشر|Post/);

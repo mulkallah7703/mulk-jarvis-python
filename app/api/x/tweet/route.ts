@@ -14,6 +14,7 @@ function logXFailure(error: unknown): void {
     .map((value) => (value || "").trim())
     .filter(Boolean);
   let message = error instanceof Error ? error.message : String(error);
+  if (error instanceof XApiError && error.detail) message = `${message} ${error.detail}`;
   for (const secret of secrets) message = message.split(secret).join("[key]");
   console.error(`[jarvis] x: ${message}`);
 }
@@ -40,8 +41,7 @@ export async function POST(req: Request) {
     });
   } catch (error) {
     logXFailure(error);
-    const status = error instanceof XApiError ? error.status : 0;
-    const reason = status === 401 || status === 403 ? "permissions" : "failed";
+    const reason = error instanceof XApiError ? error.reason : "failed";
     return json({ posted: false, reason, text }, 502);
   }
 }

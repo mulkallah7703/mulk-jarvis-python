@@ -27,7 +27,7 @@ import {
 } from "@/lib/text";
 import { playSpeechBlob, primeWaveAudio, stopSpeechPlayback } from "@/lib/speech-level";
 import { launchSpotify, matchSpotify, spotifyLine, spotifyTarget, type SpotifyTarget } from "@/lib/spotify";
-import { launchX, matchX, xDraftLine, xLine, xPermissionLine, xPostedLine, xTarget, type XTarget } from "@/lib/x";
+import { launchX, matchX, xDraftLine, xDuplicateLine, xLimitedLine, xLine, xPermissionLine, xPostedLine, xTarget, type XTarget } from "@/lib/x";
 import { isStopPhrase, matchWake, normalize } from "@/lib/wake";
 
 type Mode = "wake" | "session";
@@ -610,12 +610,8 @@ export function JarvisApp() {
         });
       };
       if (intent.kind === "open") return finish(xLine(command, intent), launchX(target) ? null : target);
-      // Open the composer in this turn, before any API wait, so a blocked popup still leaves the button.
-      const composeOpened = launchX(target);
-      engine.xPrompt = composeOpened ? null : target;
-      publish();
-      const draftPrompt = composeOpened ? null : target;
       return (async () => {
+        let data: { posted?: boolean; url?: string; reason?: string } = { reason: "unconfigured" };
         if (engine.xPost !== false) {
           try {
             const response = await fetch("/api/x/tweet", {
@@ -624,25 +620,26 @@ export function JarvisApp() {
               body: JSON.stringify({ text: intent.text }),
               signal: AbortSignal.timeout(8000),
             });
-            const data = (await response.json()) as { posted?: boolean; url?: string; reason?: string; text?: string };
-            if (engine.generation !== generation) return;
-            if (data.posted && data.url) {
-              const live: XTarget = { text: target.text, web: data.url, apps: [] };
-              const showedLive = launchX(live);
-              await finish(xPostedLine(command, data.url), showedLive || composeOpened ? null : live);
-              return;
-            }
-            const line = data.reason === "permissions" ? xPermissionLine(command) : xDraftLine(command);
-            await finish(line, draftPrompt);
-            return;
+            data = (await response.json()) as { posted?: boolean; url?: string; reason?: string };
           } catch {
-            if (engine.generation !== generation) return;
-            await finish(xDraftLine(command), draftPrompt);
-            return;
+            data = { reason: "failed" };
           }
         }
         if (engine.generation !== generation) return;
-        await finish(xDraftLine(command), draftPrompt);
+        if (data.posted && data.url) {
+          const live: XTarget = { text: target.text, web: data.url, apps: [] };
+          const showedLive = launchX(live);
+          await finish(xPostedLine(command, data.url), showedLive ? null : live);
+          return;
+        }
+        if (data.reason === "duplicate") {
+          await finish(xDuplicateLine(command), null);
+          return;
+        }
+        const opened = launchX(target);
+        const line =
+          data.reason === "permissions" ? xPermissionLine(command) : data.reason === "limited" ? xLimitedLine(command) : xDraftLine(command);
+        await finish(line, opened ? null : target);
       })();
     };
 

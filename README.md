@@ -107,7 +107,7 @@ Environment variables for the web app:
 | `X_API_KEY` | no | OAuth 1.0a consumer key. With the three tokens below, `POST /api/x/tweet` publishes directly. |
 | `X_API_SECRET` | no | OAuth 1.0a consumer secret. |
 | `X_ACCESS_TOKEN` | no | User access token. It must include Read and Write, or X answers 401 or 403. |
-| `X_ACCESS_TOKEN_SECRET` | no | User access token secret. If any of the four is missing, KORA opens the compose page. A 401 or 403 also opens compose and asks for a new Access Token with Read and Write. |
+| `X_ACCESS_TOKEN_SECRET` | no | User access token secret. If any of the four is missing, KORA opens the compose page. A successful post speaks the tweet link. A duplicate is not a token error. Compose opens only when the API cannot post. |
 
 If ElevenLabs is missing or returns an error, speech uses Gemini TTS when that key is set, then the browser voice.
 

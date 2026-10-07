@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import { oauthSignature, postTweet, readXCreds } from "./x-oauth.ts";
+import { classifyXFailure, oauthSignature, postTweet, readXCreds, summarizeXError } from "./x-oauth.ts";
 
 describe("x oauth", () => {
   it("matches the documented HMAC-SHA1 signature", () => {
@@ -43,7 +43,8 @@ describe("x oauth", () => {
       apiSecret: "consumer-secret-value",
       accessToken: "user-token",
       accessSecret: "user-secret-value",
-    }, async (_url, init) => {
+    }, async (url, init) => {
+      assert.equal(url, "https://api.x.com/2/tweets");
       seen = String(init?.body);
       const header = String((init?.headers as { Authorization?: string }).Authorization || "");
       assert.equal(header.startsWith("OAuth "), true);
@@ -61,7 +62,22 @@ describe("x oauth", () => {
           { apiKey: "consumer-key", apiSecret: "consumer-secret-value", accessToken: "user-token", accessSecret: "user-secret-value" },
           async () => new Response("no", { status: 403 }),
         ),
-      /x status 403/,
+      (error: unknown) => error instanceof Error && error.message === "x status 403 failed",
     );
+  });
+
+  it("treats a duplicate 403 as a duplicate, not a bad token", () => {
+    const detail = summarizeXError(
+      JSON.stringify({ title: "Forbidden", detail: "You are not allowed to create a Tweet with duplicate content.", status: 403 }),
+    );
+    assert.equal(classifyXFailure(403, detail), "duplicate");
+    assert.equal(classifyXFailure(403, summarizeXError(JSON.stringify({ errors: [{ message: "Status is a duplicate.", code: 187 }] }))), "duplicate");
+    assert.equal(classifyXFailure(403, "Forbidden"), "failed");
+    assert.equal(classifyXFailure(401, "Unauthorized"), "permissions");
+    assert.equal(
+      classifyXFailure(403, "Your client app is not configured with the appropriate oauth1 app permissions for this endpoint."),
+      "permissions",
+    );
+    assert.equal(classifyXFailure(402, "CreditsDepleted"), "limited");
   });
 });

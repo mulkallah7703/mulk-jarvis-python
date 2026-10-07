@@ -277,16 +277,42 @@ const POSTED_EN = [
 ];
 
 const PERMISSION_EN = [
-  "Regenerate the Access Token with Read and Write, and X is open.",
-  "The token cannot write, so regenerate the Access Token with Read and Write.",
-  "X refused the token, so regenerate the Access Token with Read and Write.",
-  "That Access Token is read-only, so regenerate it with Read and Write.",
-  "Direct post needs a new Access Token with Read and Write.",
-  "Writing is off, so regenerate the Access Token with Read and Write.",
-  "I opened X, and the Access Token still needs Read and Write.",
-  "Renew the Access Token with Read and Write, then try the post again.",
-  "The Access Token must be regenerated with Read and Write.",
-  "X blocked the write, so regenerate the Access Token with Read and Write.",
+  "X refused the app permission, so set Read and Write in the Developer Portal, and the draft is open.",
+  "The app still needs Read and Write in the Developer Portal, and the draft is open.",
+  "Check Read and Write on the app in the Developer Portal, and the draft is open.",
+  "X blocked the write permission, so fix it in the Developer Portal, and press Post on the draft.",
+  "The Developer Portal app needs Read and Write, and the draft is already open.",
+  "Permission is missing in the Developer Portal, so set Read and Write, and the draft is open.",
+  "X said the app cannot write, so set Read and Write in the Developer Portal.",
+  "The write permission is off in the Developer Portal, and the draft is open.",
+  "Set Read and Write for the app in the Developer Portal, and the draft is open.",
+  "X refused the app, so the Developer Portal needs Read and Write, and the draft is open.",
+];
+
+const DUPLICATE_EN = [
+  "That exact text is already on X.",
+  "X already has this post.",
+  "I posted this text before, so it is already on X.",
+  "Same words, and X already has them.",
+  "No second copy, because this text is already on X.",
+  "X kept the first one, and this text is already up.",
+  "This post is already on X.",
+  "I am not posting a duplicate, because X already has it.",
+  "The same text is already live on X.",
+  "X refused a copy, because this text is already there.",
+];
+
+const LIMITED_EN = [
+  "The X posting allowance is used, so the draft is open.",
+  "X is out of posting credits, so the draft is open.",
+  "The write allowance is spent, so the draft is open.",
+  "X stopped the extra post, so the draft is open.",
+  "No posting credit left, so the draft is open.",
+  "X hit its posting limit, so the draft is open.",
+  "The allowance is gone, so the draft is open.",
+  "X will not take another post right now, so the draft is open.",
+  "Posting credit is empty, so the draft is open.",
+  "X paused direct posts, so the draft is open.",
 ];
 
 const DRAFT_EN = [
@@ -368,16 +394,42 @@ const POSTED_AR = [
 ];
 
 const PERMISSION_AR = [
-  "جدد Access Token بخيار Read and Write، وإكس مفتوح.",
-  "التوكن ما يكتب، جدد Access Token مع Read and Write.",
-  "إكس رفض التوكن، جدده بصلاحية Read and Write.",
-  "الصلاحية قراءة بس، جدد Access Token مع Read and Write.",
-  "النشر وقف، جدد Access Token وخياره Read and Write.",
-  "ما قدرت أنشر لأن الكتابة مقفلة، جدد Access Token.",
-  "فتحت إكس، وجدد Access Token بصلاحية Read and Write.",
-  "التوكن ناقص كتابة، جدده من البوابة مع Read and Write.",
-  "جدد Access Token مع Read and Write، وبعدها أنشر.",
-  "إكس قافل الكتابة، جدد Access Token بخيار Read and Write.",
+  "إكس رفض صلاحية التطبيق، وفي Developer Portal خلّه Read and Write، والمسودة مفتوحة.",
+  "التطبيق يبي Read and Write في Developer Portal، والمسودة مفتوحة.",
+  "شيك Read and Write للتطبيق في Developer Portal، والمسودة قدامك.",
+  "إكس قافل الكتابة على التطبيق، عدلها في Developer Portal، والمسودة مفتوحة.",
+  "صلاحية التطبيق في Developer Portal لازم تكون Read and Write.",
+  "الكتابة مقفلة من Developer Portal، خلّها Read and Write، والمسودة مفتوحة.",
+  "إكس قال التطبيق ما يكتب، عدل Read and Write في Developer Portal.",
+  "صلاحية التطبيق ناقصة في Developer Portal، والمسودة مفتوحة.",
+  "في Developer Portal خل التطبيق Read and Write، والمسودة مفتوحة.",
+  "إكس رفض التطبيق، وDeveloper Portal يبي Read and Write.",
+];
+
+const DUPLICATE_AR = [
+  "هذا النص موجود على إكس من قبل.",
+  "نشرته قبل، والنص نفسه على إكس.",
+  "إكس عنده هذا الكلام من قبل.",
+  "ما أكرر نفس النص، وهو أصلا على إكس.",
+  "النسخة الأولى على إكس، وهذا نفس الكلام.",
+  "هذا المنشور طالع من قبل على إكس.",
+  "إكس رافض التكرار، لأن النص موجود.",
+  "نفس الكلام منشور على إكس.",
+  "ما في نسخة ثانية، والنص على إكس.",
+  "هذا النص طلع قبل شوي على إكس.",
+];
+
+const LIMITED_AR = [
+  "حصة النشر على إكس خلصت، والمسودة مفتوحة.",
+  "رصيد النشر على إكس خلص، والمسودة قدامك.",
+  "إكس وقف الزيادة، والمسودة مفتوحة.",
+  "ما في رصيد نشر زيادة، والمسودة مفتوحة.",
+  "حد النشر على إكس وصل، والمسودة مفتوحة.",
+  "إكس ما يقبل منشور زيادة الحين، والمسودة مفتوحة.",
+  "رصيد الكتابة خلص، والمسودة في إكس.",
+  "الحصة خلصت على إكس، والمسودة مفتوحة.",
+  "إكس أوقف النشر المباشر، والمسودة مفتوحة.",
+  "ما قدر يكمل النشر من الرصيد، والمسودة مفتوحة.",
 ];
 
 const DRAFT_AR = [
@@ -412,13 +464,18 @@ export function resetXLines(): void {
   lastXLine.clear();
 }
 
-function poolFor(arabic: boolean, kind: "open" | "compose" | "ask" | "posted" | "failed" | "permissions" | "draft"): string[] {
+function poolFor(
+  arabic: boolean,
+  kind: "open" | "compose" | "ask" | "posted" | "failed" | "permissions" | "draft" | "duplicate" | "limited",
+): string[] {
   if (kind === "ask") return arabic ? ASK_AR : ASK_EN;
   if (kind === "compose") return arabic ? COMPOSE_AR : COMPOSE_EN;
   if (kind === "posted") return arabic ? POSTED_AR : POSTED_EN;
   if (kind === "failed") return arabic ? FAILED_AR : FAILED_EN;
   if (kind === "permissions") return arabic ? PERMISSION_AR : PERMISSION_EN;
   if (kind === "draft") return arabic ? DRAFT_AR : DRAFT_EN;
+  if (kind === "duplicate") return arabic ? DUPLICATE_AR : DUPLICATE_EN;
+  if (kind === "limited") return arabic ? LIMITED_AR : LIMITED_EN;
   return arabic ? OPEN_AR : OPEN_EN;
 }
 
@@ -458,10 +515,20 @@ export function xDraftLine(raw: string, random: () => number = Math.random): str
   return pickLine(`${arabic ? "ar" : "en"}:draft`, poolFor(arabic, "draft"), random);
 }
 
-/** Spoken when X answers 401 or 403: the user token cannot write. */
+/** Spoken only when X says the app itself cannot write. */
 export function xPermissionLine(raw: string, random: () => number = Math.random): string {
   const arabic = spokenArabic(raw);
   return pickLine(`${arabic ? "ar" : "en"}:permissions`, poolFor(arabic, "permissions"), random);
+}
+
+export function xDuplicateLine(raw: string, random: () => number = Math.random): string {
+  const arabic = spokenArabic(raw);
+  return pickLine(`${arabic ? "ar" : "en"}:duplicate`, poolFor(arabic, "duplicate"), random);
+}
+
+export function xLimitedLine(raw: string, random: () => number = Math.random): string {
+  const arabic = spokenArabic(raw);
+  return pickLine(`${arabic ? "ar" : "en"}:limited`, poolFor(arabic, "limited"), random);
 }
 
 /**
