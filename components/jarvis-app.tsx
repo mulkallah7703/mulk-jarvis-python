@@ -27,6 +27,7 @@ import {
 } from "@/lib/text";
 import { playSpeechBlob, primeWaveAudio, stopSpeechPlayback } from "@/lib/speech-level";
 import { launchSpotify, matchSpotify, spotifyLine, spotifyTarget, type SpotifyTarget } from "@/lib/spotify";
+import { launchX, matchX, xFailedLine, xLine, xPermissionLine, xPostedLine, xTarget, type XTarget } from "@/lib/x";
 import { isStopPhrase, matchWake, normalize } from "@/lib/wake";
 
 type Mode = "wake" | "session";
@@ -91,6 +92,9 @@ type Engine = {
   chatAbort: AbortController | null;
   ttsAbort: AbortController | null;
   spotifyPrompt: SpotifyTarget | null;
+  xPrompt: XTarget | null;
+  awaitingX: boolean;
+  xPost: boolean | null;
 };
 
 type View = {
@@ -106,6 +110,7 @@ type View = {
   lang: Lang;
   lines: Line[];
   spotifyPrompt: boolean;
+  xPrompt: boolean;
 };
 
 type Api = {
@@ -115,6 +120,7 @@ type Api = {
   setLang: (lang: Lang) => void;
   submit: (text: string) => void;
   openSpotify: () => void;
+  openX: () => void;
 };
 
 const LANG_KEY = "mulk-jarvis-stt-lang";
@@ -166,6 +172,9 @@ function createEngine(): Engine {
     chatAbort: null,
     ttsAbort: null,
     spotifyPrompt: null,
+    xPrompt: null,
+    awaitingX: false,
+    xPost: null,
   };
 }
 
@@ -183,6 +192,7 @@ function snapshot(engine: Engine): View {
     lang: engine.lang,
     lines: engine.lines.map((line) => ({ ...line })),
     spotifyPrompt: Boolean(engine.spotifyPrompt),
+    xPrompt: Boolean(engine.xPrompt),
   };
 }
 
@@ -481,11 +491,12 @@ export function JarvisApp() {
     const publish = () => setView(snapshot(engine));
     const configReady = fetch("/api/config")
       .then((response) => response.json())
-      .then((data: { hasGeminiKey?: boolean; tts?: TtsProvider; stt?: SttProvider }) => {
+      .then((data: { hasGeminiKey?: boolean; tts?: TtsProvider; stt?: SttProvider; xPost?: boolean }) => {
         if (engine.closed) return;
         engine.hasKey = Boolean(data.hasGeminiKey);
         if (data.tts === "gemini" || data.tts === "elevenlabs" || data.tts === "browser") engine.tts = data.tts;
         engine.stt = data.stt === "scribe" ? "scribe" : "browser";
+        engine.xPost = Boolean(data.xPost);
         publish();
       });
 
@@ -567,11 +578,69 @@ export function JarvisApp() {
       return speaking;
     };
 
+    const startX = (command: string, generation: number, dictated?: string): Promise<void> | null => {
+      const intent = dictated !== undefined ? { kind: "post" as const, text: dictated } : matchX(command);
+      if (!intent) return null;
+      engine.awaitingX = intent.kind === "await";
+      if (intent.kind === "await") {
+        engine.xPrompt = null;
+        return sayFixed(xLine(command, intent), generation).then(() => {
+          if (engine.generation === generation) releaseMic();
+        });
+      }
+      const target = xTarget(intent);
+      const finish = (line: string, prompt: XTarget | null) => {
+        engine.xPrompt = prompt;
+        return sayFixed(line, generation).then(() => {
+          if (engine.generation === generation) releaseMic();
+        });
+      };
+      if (intent.kind === "open") return finish(xLine(command, intent), launchX(target) ? null : target);
+      return (async () => {
+        if (engine.xPost !== false) {
+          try {
+            const response = await fetch("/api/x/tweet", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ text: intent.text }),
+            });
+            const data = (await response.json()) as { posted?: boolean; url?: string; reason?: string; text?: string };
+            if (engine.generation !== generation) return;
+            if (data.posted && data.url) {
+              await finish(xPostedLine(command, data.url), null);
+              return;
+            }
+            if (data.reason === "permissions") {
+              await finish(xPermissionLine(command), launchX(target) ? null : target);
+              return;
+            }
+            if (data.reason === "failed" || !response.ok) {
+              await finish(xFailedLine(command), launchX(target) ? null : target);
+              return;
+            }
+          } catch {
+            if (engine.generation !== generation) return;
+            await finish(xFailedLine(command), launchX(target) ? null : target);
+            return;
+          }
+        }
+        if (engine.generation !== generation) return;
+        await finish(xLine(command, intent), launchX(target) ? null : target);
+      })();
+    };
+
     const openSession = async (remainder: string) => {
       const generation = engine.generation;
       engine.mode = "session";
       engine.busy = true;
       pauseListen(engine);
+      if (remainder.trim() && matchX(remainder)) {
+        const speaking = startX(remainder, generation);
+        if (speaking) {
+          await speaking;
+          return;
+        }
+      }
       if (remainder.trim() && matchSpotify(remainder)) {
         const speaking = startSpotify(remainder, generation);
         if (speaking) {
@@ -594,6 +663,8 @@ export function JarvisApp() {
       const generation = engine.generation;
       stopAudio(engine);
       engine.spotifyPrompt = null;
+      engine.xPrompt = null;
+      engine.awaitingX = false;
       engine.mode = "wake";
       engine.history = [];
       engine.busy = true;
@@ -630,9 +701,14 @@ export function JarvisApp() {
         playWakeChime();
         triggerAwaken();
         pushLine(engine, "you", text);
-        const spotify = matchSpotify(wake.remainder) ? wake.remainder : matchSpotify(text) ? text : "";
-        const speaking = spotify ? startSpotify(spotify, engine.generation) : null;
-        if (!speaking) engine.spotifyPrompt = null;
+        const xCommand = matchX(wake.remainder) ? wake.remainder : matchX(text) ? text : "";
+        const spotify = xCommand ? "" : matchSpotify(wake.remainder) ? wake.remainder : matchSpotify(text) ? text : "";
+        const speaking = xCommand ? startX(xCommand, engine.generation) : spotify ? startSpotify(spotify, engine.generation) : null;
+        if (!speaking) {
+          engine.spotifyPrompt = null;
+          engine.xPrompt = null;
+        } else if (xCommand) engine.spotifyPrompt = null;
+        else engine.xPrompt = null;
         publish();
         if (speaking) {
           engine.mode = "session";
@@ -656,20 +732,50 @@ export function JarvisApp() {
         await endSession(text);
         return;
       }
-      if (wake && !wake.remainder && !matchSpotify(text)) {
+      if (engine.awaitingX) {
+        const follow = matchX(text);
+        const dictatedWake = matchWake(text);
+        if (follow) {
+          engine.awaitingX = false;
+          const speaking = startX(text, engine.generation);
+          if (speaking) {
+            publish();
+            await speaking;
+            return;
+          }
+        } else if (matchSpotify(text)) {
+          engine.awaitingX = false;
+        } else if (dictatedWake && !dictatedWake.remainder) {
+          /* bare wake word: keep waiting for the post */
+        } else {
+          engine.awaitingX = false;
+          const dictated = dictatedWake?.remainder || text;
+          const speaking = startX(dictated, engine.generation, dictated);
+          if (speaking) {
+            publish();
+            await speaking;
+            return;
+          }
+        }
+      }
+      if (wake && !wake.remainder && !matchSpotify(text) && !matchX(text)) {
         const generation = engine.generation;
         await sayFixed(ackPhrase(text), generation);
         if (engine.generation === generation) releaseMic();
         return;
       }
-      const command = matchSpotify(text) ? text : wake?.remainder || text;
-      const speaking = startSpotify(command, engine.generation);
+      const xCommand = matchX(text) ? text : wake?.remainder && matchX(wake.remainder) ? wake.remainder : "";
+      const command = xCommand || (matchSpotify(text) ? text : wake?.remainder || text);
+      const speaking = xCommand ? startX(xCommand, engine.generation) : startSpotify(command, engine.generation);
       if (speaking) {
+        if (xCommand) engine.spotifyPrompt = null;
+        else engine.xPrompt = null;
         publish();
         await speaking;
         return;
       }
       engine.spotifyPrompt = null;
+      engine.xPrompt = null;
       await answer(command, engine.generation);
     };
 
@@ -874,6 +980,8 @@ export function JarvisApp() {
         engine.muted = false;
         engine.interim = "";
         engine.spotifyPrompt = null;
+        engine.xPrompt = null;
+        engine.awaitingX = false;
         engine.phase = "listening";
         setUiSoundsMuted(false);
         publish();
@@ -892,6 +1000,8 @@ export function JarvisApp() {
         engine.generation += 1;
         stopAudio(engine);
         engine.mode = "wake";
+        engine.awaitingX = false;
+        engine.xPrompt = null;
         engine.busy = false;
         engine.muted = true;
         engine.interim = "";
@@ -917,6 +1027,12 @@ export function JarvisApp() {
         const target = engine.spotifyPrompt;
         if (!target) return;
         if (launchSpotify(target)) engine.spotifyPrompt = null;
+        publish();
+      },
+      openX: () => {
+        const target = engine.xPrompt;
+        if (!target) return;
+        if (launchX(target)) engine.xPrompt = null;
         publish();
       },
     };
@@ -1061,6 +1177,11 @@ export function JarvisApp() {
               {view.spotifyPrompt ? (
                 <button type="button" className="spotify-toast" onClick={() => api.current?.openSpotify()}>
                   Open Spotify
+                </button>
+              ) : null}
+              {view.xPrompt ? (
+                <button type="button" className="x-toast" onClick={() => api.current?.openX()}>
+                  Open X
                 </button>
               ) : null}
               {view.needsTap ? (

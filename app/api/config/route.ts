@@ -1,3 +1,4 @@
+import { readXCreds } from "@/lib/x-oauth";
 import { geminiApiKey, geminiModel, resolveWebTts, sttProvider } from "@/lib/server/settings";
 
 export const dynamic = "force-dynamic";
@@ -10,6 +11,7 @@ export function GET() {
       model: geminiModel(),
       tts: resolveWebTts(),
       stt: sttProvider(),
+      xPost: Boolean(readXCreds()),
     },
     { headers: { "Cache-Control": "no-store" } },
   );

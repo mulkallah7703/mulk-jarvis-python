@@ -104,6 +104,10 @@ Environment variables for the web app:
 | `ELEVENLABS_API_KEY` | no | When set, `/api/tts` speaks with ElevenLabs first, and `/api/stt` transcribes with Scribe v2. Scribe is billed by audio duration. | 
 | `ELEVENLABS_VOICE_ID` | no | Defaults to `ER6QMHaBjLyek2P4dKLO`. A missing voice falls back to `rPNcQ53R703tTmtue1AT`. |
 | `ELEVENLABS_MODEL` | no | Defaults to `eleven_flash_v2_5`. `ELEVENLABS_MODEL_ID` is still accepted. |
+| `X_API_KEY` | no | OAuth 1.0a consumer key. With the three tokens below, `POST /api/x/tweet` publishes directly. |
+| `X_API_SECRET` | no | OAuth 1.0a consumer secret. |
+| `X_ACCESS_TOKEN` | no | User access token. It must include Read and Write, or X answers 401 or 403. |
+| `X_ACCESS_TOKEN_SECRET` | no | User access token secret. If any of the four is missing, KORA opens the compose page. A 401 or 403 also opens compose and asks for a new Access Token with Read and Write. |
 
 If ElevenLabs is missing or returns an error, speech uses Gemini TTS when that key is set, then the browser voice.
 
