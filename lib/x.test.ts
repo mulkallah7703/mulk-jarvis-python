@@ -8,6 +8,7 @@ import {
   composePost,
   matchX,
   resetXLines,
+  xDraftLine,
   xLine,
   xPermissionLine,
   xPostedLine,
@@ -56,9 +57,27 @@ describe("x intents", () => {
       assert.equal(intent.kind, "post", phrase);
       assert.equal(intent.text.includes("#"), false, phrase);
     }
+    const mixed = "مرحبا أنا ملك الله السعدي";
+    for (const phrase of [
+      `افتح اكس انشر منشور ${SAMPLE}`,
+      `افتح إكس انشر ${SAMPLE}`,
+      `open x and post ${mixed}`,
+      `open x android post ${mixed}`,
+      `Open X android tweet ${mixed}`,
+    ]) {
+      const intent = matchX(phrase);
+      assert.ok(intent, phrase);
+      assert.equal(intent.kind, "post", phrase);
+      const expected = phrase.includes(SAMPLE) ? SAMPLE : mixed;
+      assert.equal(intent.text, expected, phrase);
+      const target = xTarget(intent);
+      assert.equal(target.text, `${expected} ${X_HASHTAGS[0]} ${X_HASHTAGS[1]}`, phrase);
+      assert.equal(target.web.startsWith("https://x.com/compose/post?text="), true, phrase);
+    }
     assert.equal(matchX(`افتح إكس وانشر ${SAMPLE}`)?.text, SAMPLE);
     assert.equal(matchX("open twitter and post hello there")?.text, "hello there");
     assert.equal(matchX("افتح إكس")?.kind, "open");
+    assert.equal(matchX("open x")?.kind, "open");
     for (const phrase of ["افتح إكس وانشر", "open X and tweet", "افتح إكس و انشر"]) {
       assert.equal(matchX(phrase)?.kind, "await", phrase);
     }
@@ -122,6 +141,11 @@ describe("x intents", () => {
     assert.match(permission, /Read and Write/);
     assert.equal((permission.match(/[.!?؟]/g) || []).length, 1, permission);
     assert.equal(/جاهزة|قلتِ|أنشري/.test(permission), false);
+    resetXLines();
+    const draft = xDraftLine(`افتح اكس انشر منشور ${SAMPLE}`, () => 0);
+    assert.match(draft, /نشر|Post/);
+    assert.equal(/تم النشر|Published/.test(draft), false);
+    assert.equal((draft.match(/[.!?؟]/g) || []).length, 1, draft);
   });
 
   it("leaves ordinary sentences to Gemini", () => {
