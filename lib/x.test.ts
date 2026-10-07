@@ -78,6 +78,17 @@ describe("x intents", () => {
     assert.equal(matchX("open twitter and post hello there")?.text, "hello there");
     assert.equal(matchX("افتح إكس")?.kind, "open");
     assert.equal(matchX("open x")?.kind, "open");
+    assert.equal(matchX("افتح عكس")?.kind, "open");
+    assert.equal(matchX("Open X and")?.kind, "await");
+    assert.equal(matchX("open x and")?.kind, "await");
+    const noisy = "كورة افتحك، سوي نشر منشور. السلام عليكم ورحمة الله وبركاته";
+    const noisyIntent = matchX(noisy);
+    assert.ok(noisyIntent);
+    assert.equal(noisyIntent.kind, "post");
+    assert.equal(noisyIntent.text, "السلام عليكم ورحمة الله وبركاته");
+    assert.equal(xTarget(noisyIntent).text, `السلام عليكم ورحمة الله وبركاته ${X_HASHTAGS[0]} ${X_HASHTAGS[1]}`);
+    assert.equal(matchX(`سوي نشر منشور ${SAMPLE}`)?.text, SAMPLE);
+    assert.equal(matchX(`افتح عكس وانشر منشور ${SAMPLE}`)?.text, SAMPLE);
     for (const phrase of ["افتح إكس وانشر", "open X and tweet", "افتح إكس و انشر"]) {
       assert.equal(matchX(phrase)?.kind, "await", phrase);
     }
@@ -148,9 +159,32 @@ describe("x intents", () => {
     assert.equal((draft.match(/[.!?؟]/g) || []).length, 1, draft);
   });
 
-  it("leaves ordinary sentences to Gemini", () => {
-    for (const phrase of ["what is x", "open the xbox", "I might tweet later", "وش رايك في إكس", "كم الساعة", "play music"]) {
+  it("leaves ordinary sentences to Gemini, including the quota line", () => {
+    for (const phrase of [
+      "what is x",
+      "open the xbox",
+      "I might tweet later",
+      "وش رايك في إكس",
+      "كم الساعة",
+      "play music",
+      "خلصت حصة Gemini المجانية اليوم. فعّل الفوترة وأرد عليك زين.",
+    ]) {
       assert.equal(matchX(phrase), null, phrase);
     }
+  });
+
+  it("catches noisy publish lines before any model call", () => {
+    const calls: string[] = [];
+    const handle = (phrase: string) => {
+      const intent = matchX(phrase);
+      if (intent) return intent.kind;
+      calls.push(phrase);
+      return "gemini";
+    };
+    assert.equal(handle("Open X and"), "await");
+    assert.equal(handle("افتح عكس"), "open");
+    assert.equal(handle("كورة افتحك، سوي نشر منشور. السلام عليكم ورحمة الله وبركاته"), "post");
+    assert.equal(handle("open x android post مرحبا"), "post");
+    assert.deepEqual(calls, []);
   });
 });

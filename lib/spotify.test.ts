@@ -16,6 +16,8 @@ describe("spotify intents", () => {
       "spot a fi",
       "open  Spotify!",
       "افتح، spotify؟",
+      "كورة افتح سبوتيفاي",
+      "كورة سوي spotify",
     ]) {
       const intent = matchSpotify(phrase);
       assert.ok(intent, phrase);
@@ -40,7 +42,7 @@ describe("spotify intents", () => {
   });
 
   it("opens a popular search when the user just says play music", () => {
-    for (const phrase of ["play music", "play some music", "put on a song", "شغل موسيقى", "شغل أغاني", "حط موسيقى"]) {
+    for (const phrase of ["play music", "play some music", "put on a song", "شغل موسيقى", "شغل أغاني", "حط موسيقى", "كورة سوي أغاني"]) {
       const intent = matchSpotify(phrase);
       assert.ok(intent, phrase);
       assert.equal(intent.kind, "play", phrase);

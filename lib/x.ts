@@ -4,7 +4,7 @@
  */
 
 import { hasArabic } from "./text.ts";
-import { normalize } from "./wake.ts";
+import { normalize, stripAddress } from "./wake.ts";
 
 export const X_HASHTAGS = ["#mulk_allah_alsadi", "#ملك_الله_السعدي"] as const;
 export const X_LIMIT = 280;
@@ -21,10 +21,6 @@ export type XTarget = {
   apps: string[];
 };
 
-const LEADING_WAKE =
-  /^(?:hey kora|hi kora|ya kora|يا كورا|هاي كورا|kora|cora|korra|corra|qora|kura|كورا|قورا)\s+/;
-const LEAD =
-  /^(?:please|pls|hey|hi|ok|okay|now|can you|could you|would you|لو سمحت|من فضلك|ياخي|يا|ابي|ابغى|ابغي|ودي|خلني|خل)\s+/;
 const TRAIL = /\s+(?:please|pls|now|لو سمحت|من فضلك|الحين)$/;
 
 const OPEN_COMMANDS = [
@@ -95,39 +91,48 @@ const POST_COMMANDS = [
   ["open", "x", "post"],
   ["open", "twitter", "tweet"],
   ["open", "twitter", "post"],
+  ["open", "x", "and"],
+  ["open", "twitter", "and"],
+  ["افتح", "اكس", "و"],
+  ["افتح", "اكس", "سوي", "نشر", "منشور"],
+  ["افتح", "اكس", "و", "سوي", "نشر", "منشور"],
+  ["افتح", "اكس", "سوي", "نشر"],
+  ["افتح", "اكس", "و", "سوي", "نشر"],
+  ["سوي", "نشر", "منشور"],
+  ["سوي", "لي", "نشر", "منشور"],
+  ["سوي", "نشر"],
+  ["سوي", "لي", "نشر"],
+  ["سو", "نشر", "منشور"],
+  ["سو", "نشر"],
+  ["سوي", "منشور"],
+  ["اعمل", "نشر", "منشور"],
+  ["اعمل", "منشور"],
 ];
 
-/** Speech-to-text often hears "and" as "android". */
-function foldToken(piece: string): string {
-  if (piece === "android" || piece === "اندرويد") return "and";
-  return piece;
+/**
+ * Speech-to-text swaps "and"/"اكس" and sometimes glues "افتح إكس" into one word.
+ * Each token expands to one or more command tokens.
+ */
+function expandToken(piece: string): string[] {
+  if (piece === "android" || piece === "اندرويد") return ["and"];
+  if (piece === "عكس" || piece === "عاكس" || piece === "عكسي") return ["اكس"];
+  if (piece === "افتحك" || piece === "افتحكس" || piece === "افتحاكس" || piece === "افتحاك") return ["افتح", "اكس"];
+  if (piece === "وسوي") return ["و", "سوي"];
+  return [piece];
 }
 
 function corePhrase(raw: string): string {
-  let text = normalize(raw);
-  for (let pass = 0; pass < 3; pass += 1) {
-    const next = text.replace(LEADING_WAKE, "").trim();
-    if (next === text) break;
-    text = next;
-  }
-  for (let pass = 0; pass < 4; pass += 1) {
-    const next = text.replace(LEAD, "");
-    if (next === text) break;
-    text = next;
-  }
-  return text
-    .replace(TRAIL, "")
-    .split(" ")
-    .filter(Boolean)
-    .map(foldToken)
-    .join(" ");
+  const text = stripAddress(normalize(raw)).replace(TRAIL, "");
+  return text.split(" ").filter(Boolean).flatMap(expandToken).join(" ");
 }
 
 function rawPieces(raw: string): { words: string[]; pieces: { index: number; piece: string }[] } {
   const words = raw.trim().split(/\s+/).filter(Boolean);
   const pieces: { index: number; piece: string }[] = [];
   words.forEach((word, index) => {
-    for (const piece of normalize(word).split(" ").filter(Boolean)) pieces.push({ index, piece: foldToken(piece) });
+    for (const piece of normalize(word).split(" ").filter(Boolean)) {
+      for (const expanded of expandToken(piece)) pieces.push({ index, piece: expanded });
+    }
   });
   return { words, pieces };
 }

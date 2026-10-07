@@ -15,7 +15,7 @@ describe("wake word", () => {
   });
 
   it("matches transcription variants", () => {
-    for (const phrase of ["hey cora", "hi kora", "korra", "corra", "qora", "kura", "كورا", "قورا", "كُورا", "يا كورا", "هاي كورا"]) {
+    for (const phrase of ["hey cora", "hi kora", "korra", "corra", "qora", "kura", "كورا", "قورا", "كُورا", "يا كورا", "هاي كورا", "كورة", "يا كورة"]) {
       const hit = matchWake(phrase);
       assert.ok(hit, phrase);
       assert.equal(hit.remainder, "", phrase);
@@ -29,6 +29,9 @@ describe("wake word", () => {
     const named = matchWake("يا كورا، وش الوقت؟");
     assert.ok(named);
     assert.equal(named.remainder, "وش الوقت؟");
+    const heard = matchWake("كورة افتح عكس");
+    assert.ok(heard);
+    assert.equal(heard.remainder, "افتح عكس");
   });
 
   it("ignores the old wake word and lookalikes", () => {
@@ -38,7 +41,6 @@ describe("wake word", () => {
     assert.equal(matchWake("core"), null);
     assert.equal(matchWake("corner office"), null);
     assert.equal(matchWake("chorus"), null);
-    assert.equal(matchWake("كورة"), null);
     assert.equal(matchWake("hello there"), null);
   });
 });
